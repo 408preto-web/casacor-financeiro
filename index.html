@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Casa Cor Ceará — Pagamentos</title>
+  <meta name="description" content="Controle de pagamentos da Casa Cor Ceará">
+  <meta name="theme-color" content="#9a3412">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CC Pagamentos">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Telas de acesso (login, cadastro, aguardando aprovação) -->
+  <div id="gate" class="gate" hidden></div>
+
+  <div class="app" id="app" hidden>
+    <nav class="sidebar" aria-label="Navegação principal">
+      <div class="brand">
+        <img src="icons/icon.svg" alt="" width="36" height="36">
+        <span>Casa Cor Ceará<small>Pagamentos</small></span>
+      </div>
+      <button class="nav-item" data-view="painel"><span class="ni">🏠</span><span>Painel</span><span class="nav-badge" hidden></span></button>
+      <button class="nav-item" data-view="contas"><span class="ni">📋</span><span>Contas</span></button>
+      <button class="nav-item" data-view="cartoes"><span class="ni">💳</span><span>Cartões</span></button>
+      <button class="nav-item" data-view="relatorios"><span class="ni">📊</span><span>Relatórios</span></button>
+      <button class="nav-item" data-view="equipe"><span class="ni">👥</span><span>Equipe</span><span class="nav-badge" hidden></span></button>
+      <button class="nav-item" data-view="ajustes"><span class="ni">⚙️</span><span>Ajustes</span></button>
+      <div class="sidebar-user" id="sidebarUser"></div>
+    </nav>
+
+    <main class="content">
+      <header class="topbar">
+        <h1 id="viewTitle"></h1>
+        <div class="topbar-actions">
+          <button class="sync-pill" id="syncPill" title="Atualizar"></button>
+          <button class="btn primary" id="addBtn">+ Lançar conta</button>
+        </div>
+      </header>
+      <section id="view"></section>
+    </main>
+  </div>
+
+  <button class="fab" id="fab" aria-label="Lançar conta" hidden>+</button>
+
+  <dialog id="modal">
+    <form method="dialog" id="modalForm" class="modal-body"></form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
