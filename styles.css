@@ -455,3 +455,14 @@ button.chip { cursor: pointer; }
   .detail-head { flex-direction: column; }
   .detail-amount { text-align: left; }
 }
+
+/* Seção de pagamento do formulário */
+.pay-section { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
+.pay-section .pay-title { font-size: 15px; font-weight: 700; color: var(--text); margin: 0; }
+.inst-preview { display: flex; flex-wrap: wrap; gap: 6px 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; }
+.inst-preview b { width: 100%; }
+.inst-preview span { background: var(--surface); border: 1px solid var(--border); border-radius: 99px; padding: 3px 10px; font-variant-numeric: tabular-nums; }
+.inst-list { margin: 6px 0 12px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 14px; }
+.inst-list > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px dashed var(--border); font-variant-numeric: tabular-nums; }
+.inst-list > div:last-child { border-bottom: 0; }
+.inst-list > div.cur { font-weight: 700; }

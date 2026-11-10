@@ -723,6 +723,15 @@ function bindAttachments(root) {
 }
 
 /* ---------- Lançar / editar conta ---------- */
+const TERMS = [['0', 'No dia'], ['7', '7 dias'], ['15', '15 dias'], ['30', '30 dias'], ['custom', 'Outra data']];
+
+/** Vencimento da parcela i (0 = primeira): cartão → fatura de cada mês; senão, pelo intervalo escolhido. */
+function installmentDue(i, { card, purchase, due, interval }) {
+  if (card) return invoiceDue(card, addMonthsISO(purchase, i));
+  if (!interval || interval === 'month') return addMonthsISO(due, i);
+  return addDaysISO(due, i * Number(interval));
+}
+
 function openBillForm(bill, defaults = {}) {
   const isEdit = !!bill;
   const myArea = state.areas.find((a) => a.name.toLowerCase() === (state.me.area || '').toLowerCase());
@@ -747,8 +756,14 @@ function openBillForm(bill, defaults = {}) {
       <label class="field full" data-for="transferencia"><span>Dados bancários</span><textarea name="bank_info" rows="2" placeholder="Banco, agência, conta, CPF/CNPJ, nome">${esc(b.bank_info)}</textarea></label>
       <label class="field full" data-for="cartao"><span>Cartão</span><select name="card_id">${activeCards.length ? activeCards.map((c) => `<option value="${c.id}" ${c.id === b.card_id ? 'selected' : ''}>${esc(cardLabel(c))}</option>`).join('') : '<option value="">Nenhum cartão cadastrado (aba Cartões)</option>'}</select>
         <small class="muted" id="cardHint"></small></label>
-      <label class="field" id="dueWrap"><span>Data para pagar (vencimento) *</span><input type="date" name="due_date" value="${b.due_date}"></label>
-      ${isEdit ? '' : `<label class="field"><span>Parcelas</span><select name="installments">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}">${i === 0 ? 'À vista (1x)' : `${i + 1}x (valor dividido)`}</option>`).join('')}</select></label>`}
+      <div class="field full pay-section"><span class="pay-title">📅 Pagamento</span></div>
+      <div class="field full" id="termWrap"><span>Prazo para pagar</span>
+        <div class="chips-select">${TERMS.map(([v, l]) => `<label class="chip-opt"><input type="radio" name="term" value="${v}" ${(isEdit ? 'custom' : '0') === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div></div>
+      <label class="field" id="dueWrap"><span id="dueLabel">Data do pagamento *</span><input type="date" name="due_date" value="${b.due_date || (isEdit ? '' : b.purchase_date)}"></label>
+      ${isEdit ? '' : `<label class="field"><span>Parcelas</span><select name="installments">${Array.from({ length: 24 }, (_, i) => `<option value="${i + 1}">${i === 0 ? 'À vista (1x)' : `${i + 1}x (valor total dividido)`}</option>`).join('')}</select></label>
+      <label class="field" id="intervalWrap"><span>Intervalo entre as parcelas</span><select name="interval">
+        <option value="30">A cada 30 dias (30/60/90…)</option><option value="month">Todo mês, no mesmo dia</option><option value="15">A cada 15 dias</option><option value="7">A cada 7 dias</option></select></label>
+      <div class="field full" id="instPreview"></div>`}
       <label class="field full"><span>Observações</span><textarea name="notes" rows="2">${esc(b.notes)}</textarea></label>
       <div class="field full"><span>Anexos (foto ou PDF)</span>
         <div id="attBox">${attachmentList(atts, true)}</div>
@@ -803,7 +818,7 @@ function openBillForm(bill, defaults = {}) {
       const rows = Array.from({ length: n }, (_, i) => ({
         ...base, id: i === 0 ? id : uuid(), group_id: groupId,
         amount: (per + (i === 0 ? rest : 0)) / 100,
-        due_date: card ? invoiceDue(card, addMonthsISO(purchase, i)) : addMonthsISO(due, i),
+        due_date: installmentDue(i, { card, purchase, due, interval: fd.get('interval') }),
         installment: n > 1 ? `${i + 1}/${n}` : '', attachments,
       }));
       await api.insert('bills', rows);
@@ -812,16 +827,39 @@ function openBillForm(bill, defaults = {}) {
     await loadAll({ quiet: true });
     render();
   }, () => {
+    const val = (n) => $(`[name="${n}"]`, modalForm)?.value;
     const sync = () => {
       const m = $('[name="method"]:checked', modalForm)?.value;
+      const isCard = m === 'cartao';
       $$('[data-for]', modalForm).forEach((el) => { el.style.display = el.dataset.for === m ? '' : 'none'; });
-      $('#dueWrap').style.display = m === 'cartao' ? 'none' : '';
-      $('[name="due_date"]', modalForm).required = m !== 'cartao';
-      const card = cardById($('[name="card_id"]', modalForm).value);
-      const pd = $('[name="purchase_date"]', modalForm).value;
-      $('#cardHint').innerHTML = m === 'cartao' && card && pd ? `Entra na fatura que vence em <b>${fmtDate(invoiceDue(card, pd))}</b>.` : '';
+      $('#dueWrap').style.display = isCard ? 'none' : '';
+      $('#termWrap').style.display = isCard ? 'none' : '';
+      $('[name="due_date"]', modalForm).required = !isCard;
+      const card = cardById(val('card_id'));
+      const pd = val('purchase_date');
+      // Prazo rápido: calcula a data do pagamento a partir da data da compra
+      const term = $('[name="term"]:checked', modalForm)?.value;
+      if (!isCard && pd && term && term !== 'custom') $('[name="due_date"]', modalForm).value = addDaysISO(pd, Number(term));
+      $('#cardHint').innerHTML = isCard && card && pd ? `Entra na fatura que vence em <b>${fmtDate(invoiceDue(card, pd))}</b>.` : '';
+      // Parcelas
+      const n = Number(val('installments') || 1);
+      $('#dueLabel').textContent = n > 1 ? 'Data da 1ª parcela *' : 'Data do pagamento *';
+      if ($('#intervalWrap')) $('#intervalWrap').style.display = n > 1 && !isCard ? '' : 'none';
+      const prev = $('#instPreview');
+      if (prev) {
+        const cents = parseMoney(val('amount'));
+        const due = isCard ? (card && pd ? invoiceDue(card, pd) : '') : val('due_date');
+        if (n > 1 && due && (!isCard || card)) {
+          const per = Math.floor(cents / n), rest = cents - per * n;
+          prev.innerHTML = `<div class="inst-preview"><b>${n} parcelas${cents ? ` de ${money(per)}` : ''}${isCard ? ' (uma em cada fatura)' : ''}:</b>
+            ${Array.from({ length: n }, (_, i) => `<span>${i + 1}ª ${fmtDate(installmentDue(i, { card: isCard ? card : null, purchase: pd, due, interval: val('interval') }))}${cents ? ' · ' + money(per + (i === 0 ? rest : 0)) : ''}</span>`).join('')}</div>`;
+        } else prev.innerHTML = '';
+      }
     };
-    $$('[name="method"], [name="card_id"], [name="purchase_date"]', modalForm).forEach((el) => el.addEventListener('change', sync));
+    $$('[name="method"], [name="card_id"], [name="purchase_date"], [name="term"], [name="installments"], [name="interval"]', modalForm).forEach((el) => el.addEventListener('change', sync));
+    $('[name="amount"]', modalForm).addEventListener('input', sync);
+    // Data digitada à mão → prazo "Outra data"
+    $('[name="due_date"]', modalForm).addEventListener('change', () => { const c = $('[name="term"][value="custom"]', modalForm); if (c) c.checked = true; sync(); });
     const showFiles = () => {
       const names = $$('input[type=file]', modalForm).flatMap((i) => [...i.files].map((f) => f.name));
       $('#newFiles').textContent = names.length ? `Novos: ${names.join(', ')}` : '';
@@ -858,6 +896,8 @@ function openBill(id) {
       ${b.status === 'paid' ? `<dt>Pagamento</dt><dd class="pos">Pago em <b>${fmtDate(b.paid_at)}</b> por ${esc(memberName(b.paid_by))}${b.paidCents != null && b.paidCents !== b.cents ? ` · valor pago ${money(b.paidCents)}` : ''}${b.payment_notes ? `<br>${esc(b.payment_notes)}` : ''}</dd>` : ''}
       ${b.notes ? `<dt>Observações</dt><dd>${esc(b.notes)}</dd>` : ''}
     </dl>
+    ${group > 1 ? `<div class="inst-list"><b>Parcelas</b>${state.bills.filter((x) => x.group_id === b.group_id).sort((x, y) => x.due_date.localeCompare(y.due_date)).map((x) =>
+      `<div class="${x.id === b.id ? 'cur' : ''}"><span>${esc(x.installment)} · ${fmtDate(x.due_date)}</span><span>${money(x.cents)} ${x.status === 'paid' ? '<span class="badge paid">pago</span>' : x.status === 'cancelled' ? '<span class="badge">cancelada</span>' : daysUntil(x.due_date) < 0 ? '<span class="badge overdue">atrasada</span>' : ''}</span></div>`).join('')}</div>` : ''}
     ${copyRow('Chave Pix', b.pix_key)}${copyRow('Código do boleto', b.boleto_code)}${copyRow('Dados bancários', b.bank_info)}
     <h3 class="sub-h">Anexos</h3><div id="attView">${attachmentList(b.attachments)}</div>
     <div class="modal-actions">
