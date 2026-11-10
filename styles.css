@@ -466,3 +466,5 @@ button.chip { cursor: pointer; }
 .inst-list > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; border-bottom: 1px dashed var(--border); font-variant-numeric: tabular-nums; }
 .inst-list > div:last-child { border-bottom: 0; }
 .inst-list > div.cur { font-weight: 700; }
+.alert.info { background: color-mix(in srgb, var(--primary) 10%, var(--surface)); border-color: color-mix(in srgb, var(--primary) 40%, transparent); }
+.alert-text .muted { font-size: 13px; }

@@ -378,8 +378,16 @@ function renderPainel() {
         <div class="alert-text">${late.length ? `<b>${late.length} conta${late.length > 1 ? 's' : ''} atrasada${late.length > 1 ? 's' : ''}</b> (${money(sumCents(late))})` : ''}
         ${late.length && now.length ? ' e ' : ''}${now.length ? `<b>${now.length} vence${now.length > 1 ? 'm' : ''} hoje</b> (${money(sumCents(now))})` : ''}</div></div></div>` : '';
 
+  const waiting = isAdmin() ? state.members.filter((m) => m.role === 'pending') : [];
+  const waitingAlert = waiting.length
+    ? `<div class="alerts"><div class="alert info"><span class="alert-icon">⏳</span>
+        <div class="alert-text"><b>${waiting.length === 1 ? `${esc(waiting[0].name)} está` : `${waiting.length} pessoas estão`} aguardando sua aprovação</b>
+        ${waiting.length > 1 ? `<span class="muted">(${waiting.map((m) => esc(m.name)).join(', ')})</span>` : `<span class="muted">(${esc(waiting[0].email)})</span>`}</div>
+        <button class="btn small primary" data-go="equipe">Ver e aprovar</button></div></div>` : '';
+
   return `
   <p class="hello">Olá, <b>${esc(state.me.name.split(' ')[0])}</b> 👋 ${state.settings.edition ? `<span class="muted">· Edição ${esc(state.settings.edition)}</span>` : ''}</p>
+  ${waitingAlert}
   ${alert}
   <div class="grid cols-4">
     <div class="card stat ${late.length ? 'stat-danger' : ''}"><div class="label">Atrasadas</div><div class="value ${late.length ? 'neg' : ''}">${money(sumCents(late))}</div><div class="sub">${late.length} conta(s)</div></div>
