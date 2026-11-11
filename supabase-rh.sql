@@ -125,5 +125,4 @@ create policy "rh: enviar" on storage.objects for insert to authenticated with c
 drop policy if exists "rh: apagar" on storage.objects;
 create policy "rh: apagar" on storage.objects for delete to authenticated using (bucket_id = 'rh' and public.is_hr());
 
--- A administração começa com acesso ao RH ligado
-update public.members set can_hr = true where role = 'admin' and not can_hr;
+-- Obs.: a administração já tem acesso ao RH automaticamente (pela função is_hr).
