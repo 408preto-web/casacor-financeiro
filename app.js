@@ -112,6 +112,7 @@ async function loadAll({ quiet = false } = {}) {
     const me = members.find((m) => m.user_id === api.session().user.id);
     if (me) state.me = me;
     Object.assign(state, { members, areas, cards, settings: settings[0] || { edition: '' }, bills: bills.map(normBill), loadedAt: Date.now() });
+    await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
     ui.offline = false;
     saveCache();
     if (!me || !['member', 'payer', 'admin'].includes(me.role)) return boot();
@@ -263,7 +264,7 @@ async function boot() {
 }
 
 /* ---------- Navegação ---------- */
-const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', equipe: 'Equipe', ajustes: 'Ajustes' };
+const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', equipe: 'Equipe', ajustes: 'Ajustes' };
 function setView(v) {
   ui.view = v;
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
@@ -275,7 +276,9 @@ function render() {
   $('#viewTitle').textContent = TITLES[ui.view];
   $('#fab').hidden = false;
   $('#sidebarUser').innerHTML = `<b>${esc(state.me.name)}</b><span>${ROLES[state.me.role]?.label || ''}</span>`;
-  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, equipe: renderEquipe, ajustes: renderAjustes };
+  if (ui.view === 'rh' && !isHR()) ui.view = 'painel';
+  $('.nav-item[data-view="rh"]').hidden = !isHR();
+  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, equipe: renderEquipe, ajustes: renderAjustes };
   $('#view').innerHTML = views[ui.view]();
   bindView();
   updateBadges(); updatePill();
@@ -292,6 +295,8 @@ function updateBadges() {
   const pb = $('.nav-item[data-view="painel"] .nav-badge'); if (pb) { pb.textContent = n; pb.hidden = !n; }
   const np = isAdmin() ? state.members.filter((m) => m.role === 'pending').length : 0;
   const eb = $('.nav-item[data-view="equipe"] .nav-badge'); if (eb) { eb.textContent = np; eb.hidden = !np; }
+  const nh = isHR() ? rhAlerts().filter((a) => a.level !== 'info').length : 0;
+  const hb = $('.nav-item[data-view="rh"] .nav-badge'); if (hb) { hb.textContent = nh; hb.hidden = !nh; }
   try { n + np ? navigator.setAppBadge?.(n + np) : navigator.clearAppBadge?.(); } catch { /* sem suporte */ }
 }
 
@@ -389,6 +394,7 @@ function renderPainel() {
   <p class="hello">Olá, <b>${esc(state.me.name.split(' ')[0])}</b> 👋 ${state.settings.edition ? `<span class="muted">· Edição ${esc(state.settings.edition)}</span>` : ''}</p>
   ${waitingAlert}
   ${alert}
+  ${isHR() ? rhAlertsBanner() : ''}
   <div class="grid cols-4">
     <div class="card stat ${late.length ? 'stat-danger' : ''}"><div class="label">Atrasadas</div><div class="value ${late.length ? 'neg' : ''}">${money(sumCents(late))}</div><div class="sub">${late.length} conta(s)</div></div>
     <div class="card stat ${now.length ? 'stat-warn' : ''}"><div class="label">Vencem hoje</div><div class="value">${money(sumCents(now))}</div><div class="sub">${now.length} conta(s)</div></div>
@@ -567,8 +573,8 @@ function renderEquipe() {
   const row = (m) => `<li class="member-row">
       <div class="avatar">${esc((m.name || '?').charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-title">${esc(m.name)}${m.user_id === state.me.user_id ? ' <span class="muted">(você)</span>' : ''}</div>
-        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}</div></div>
-      <div class="row-actions">${isAdmin() ? `${roleSel(m)}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
+        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}</div></div>
+      <div class="row-actions">${isAdmin() ? `${roleSel(m)}${m.role !== 'admin' && 'can_hr' in m ? `<label class="check hr-toggle"><input type="checkbox" data-hr="${m.user_id}" ${m.can_hr ? 'checked' : ''}><span>Acesso ao RH</span></label>` : ''}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
     </li>`;
   return `
   ${isAdmin() && pending.length ? `<div class="card attention"><h2>⏳ Aguardando sua aprovação</h2><ul class="tx-list">${pending.map((m) => `<li class="member-row">
@@ -581,6 +587,7 @@ function renderEquipe() {
     <ul class="tx-list">${active.map(row).join('')}</ul>
     <div class="role-help muted small">
       <b>Comprador:</b> lança contas e acompanha tudo. · <b>Pagador:</b> também marca contas como pagas. · <b>Administrador:</b> também aprova pessoas e altera configurações.
+      <br><b>🔒 Acesso ao RH:</b> vê funcionários, salários e a folha (o administrador sempre tem).
     </div>
   </div>
   ${blocked.length && isAdmin() ? `<div class="card mt"><h2>Sem acesso</h2><ul class="tx-list">${blocked.map(row).join('')}</ul></div>` : ''}
@@ -645,7 +652,15 @@ function bindView() {
     $('#rto').addEventListener('change', (e) => { ui.report.to = e.target.value; render(); });
     $('#csv').addEventListener('click', exportCsv);
   }
+  if (ui.view === 'rh') bindRH(v);
+  else $$('[data-emp]', v).forEach((el) => el.addEventListener('click', () => openEmployee(el.dataset.emp)));
   if (ui.view === 'equipe') {
+    $$('[data-hr]', v).forEach((c) => c.addEventListener('change', async () => {
+      try {
+        await api.update('members', `user_id=eq.${c.dataset.hr}`, { can_hr: c.checked });
+        toast(c.checked ? 'Acesso ao RH liberado' : 'Acesso ao RH retirado'); await loadAll({ quiet: true }); render();
+      } catch (e) { toast(e.message); render(); }
+    }));
     $$('[data-approve]', v).forEach((b) => b.addEventListener('click', () => openApprove(b.dataset.approve)));
     $$('[data-reject]', v).forEach((b) => b.addEventListener('click', () => setRole(b.dataset.reject, 'blocked', 'Acesso recusado')));
     $$('[data-role]', v).forEach((s) => s.addEventListener('change', () => setRole(s.dataset.role, s.value, 'Função alterada')));
@@ -705,27 +720,27 @@ async function prepareFile(file) {
     return blob ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file;
   } catch { return file; }
 }
-async function uploadFiles(fileList, folder, kind) {
+async function uploadFiles(fileList, folder, kind, bucket = 'anexos') {
   const out = [];
   for (const f0 of [...fileList]) {
     const f = await prepareFile(f0);
     const safe = f.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '_').slice(-60) || 'arquivo';
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 6)}-${safe}`;
-    await api.upload(path, f);
-    out.push({ path, name: f0.name, kind, type: f.type, by: state.me.user_id, at: new Date().toISOString() });
+    await api.upload(path, f, bucket);
+    out.push({ path, name: f0.name, kind, type: f.type, by: state.me.user_id, at: new Date().toISOString(), ...(bucket !== 'anexos' ? { bucket } : {}) });
   }
   return out;
 }
 const KIND_LABEL = { nf: 'Nota fiscal', boleto: 'Boleto', comprovante: 'Comprovante', outro: 'Anexo' };
 function attachmentList(atts, removable = false) {
   if (!atts.length) return '<div class="muted small">Nenhum anexo.</div>';
-  return `<ul class="att-list">${atts.map((a, i) => `<li><button type="button" class="att" data-open="${esc(a.path)}">${/pdf/.test(a.type) ? '📄' : '🖼️'} <b>${KIND_LABEL[a.kind] || 'Anexo'}</b> <span class="muted">${esc(a.name)}</span></button>
+  return `<ul class="att-list">${atts.map((a, i) => `<li><button type="button" class="att" data-open="${esc(a.path)}" data-bucket="${esc(a.bucket || 'anexos')}">${/pdf/.test(a.type) ? '📄' : '🖼️'} <b>${KIND_LABEL[a.kind] || 'Anexo'}</b> <span class="muted">${esc(a.name)}</span></button>
     ${removable ? `<button type="button" class="btn small" data-rmatt="${i}" aria-label="Remover">✕</button>` : ''}</li>`).join('')}</ul>`;
 }
 function bindAttachments(root) {
   $$('[data-open]', root).forEach((b) => b.addEventListener('click', async () => {
     const w = window.open('', '_blank');
-    try { const url = await api.signedUrl(b.dataset.open); if (w) w.location = url; else location.href = url; }
+    try { const url = await api.signedUrl(b.dataset.open, b.dataset.bucket || 'anexos'); if (w) w.location = url; else location.href = url; }
     catch (e) { w?.close(); toast(e.message); }
   }));
 }

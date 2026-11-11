@@ -100,12 +100,12 @@ const api = {
   rpc(fn, args) { return this.rest('POST', `rpc/${fn}`, args); },
 
   /* ---------- anexos (Storage, bucket privado "anexos") ---------- */
-  async upload(path, blob) {
+  async upload(path, blob, bucket = 'anexos') {
     const c = cfg();
     const token = await this.token();
     let res;
     try {
-      res = await fetch(`${c.url}/storage/v1/object/anexos/${path}`, {
+      res = await fetch(`${c.url}/storage/v1/object/${bucket}/${path}`, {
         method: 'POST', headers: { apikey: c.key, Authorization: `Bearer ${token}`, 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'false' }, body: blob,
       });
     } catch { throw new ApiError('Sem conexão para enviar o arquivo.'); }
@@ -114,21 +114,21 @@ const api = {
       throw new ApiError(/payload too large|exceeded|size/i.test(d.message || d.error || '') ? 'Arquivo grande demais (máximo 10 MB).' : dbErrorText(d, res.status));
     }
   },
-  async signedUrl(path) {
+  async signedUrl(path, bucket = 'anexos') {
     const c = cfg();
     const token = await this.token();
-    const res = await fetch(`${c.url}/storage/v1/object/sign/anexos/${path}`, {
+    const res = await fetch(`${c.url}/storage/v1/object/sign/${bucket}/${path}`, {
       method: 'POST', headers: { apikey: c.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresIn: 3600 }),
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok || !d.signedURL) throw new ApiError('Não foi possível abrir o anexo.');
     return `${c.url}/storage/v1${d.signedURL.startsWith('/') ? '' : '/'}${d.signedURL}`;
   },
-  async deleteFiles(paths) {
+  async deleteFiles(paths, bucket = 'anexos') {
     if (!paths.length) return;
     const c = cfg();
     const token = await this.token();
-    await fetch(`${c.url}/storage/v1/object/anexos`, {
+    await fetch(`${c.url}/storage/v1/object/${bucket}`, {
       method: 'DELETE', headers: { apikey: c.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: paths }),
     }).catch(() => {});
   },

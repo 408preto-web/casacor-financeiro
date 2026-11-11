@@ -25,6 +25,20 @@ e o financeiro ver o que vence e marcar como pago.
 Todos da equipe veem todas as contas. Quem cria um acesso fica **aguardando aprovação** e não vê nada até ser aprovado.
 A **primeira pessoa** a criar acesso vira administradora.
 
+## 🧑‍💼 RH — Pessoal (só para quem tem acesso ao RH)
+
+Ative rodando [`supabase-rh.sql`](supabase-rh.sql) no SQL Editor (depois do `supabase.sql`). O administrador libera o
+**Acesso ao RH** para outras pessoas em **Equipe**. Quem não tem acesso não vê funcionários, ocorrências, documentos
+nem as contas de salário (área **Pessoal**) — inclusive nas listas e relatórios.
+
+- **Funcionários:** dados, cargo, área, admissão, experiência (45/90 dias), **mensalista** (pago nos dias **15 e 30**, com
+  o % do dia 15 configurável) ou **semanalista** (valor semanal, dia da semana do pagamento), Pix/dados bancários e documentos.
+- **Ocorrências:** faltas, horas extras, férias, atestados, adiantamentos/vales, descontos e bônus (com valor sugerido:
+  falta = salário ÷ 30 ou ÷ 6 dias; hora extra = valor da hora + 50%).
+- **Folha:** gera as contas a pagar do dia 15, do dia 30 (restante + ajustes do mês) ou da semana, com conferência antes
+  e sem permitir gerar o mesmo pagamento duas vezes.
+- **Avisos:** fim da experiência, férias com prazo-limite (e vencidas) e aniversários.
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -47,4 +61,5 @@ A **primeira pessoa** a criar acesso vira administradora.
 | `api.js` | Comunicação com o Supabase (login, dados, anexos) |
 | `config.js` | Endereço e chave pública do Supabase |
 | `supabase.sql` | Tabelas, permissões (RLS) e armazenamento de anexos |
+| `rh.js`, `supabase-rh.sql` | Módulo de RH (funcionários, ocorrências, folha, avisos) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalação como app |
