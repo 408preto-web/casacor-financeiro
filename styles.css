@@ -492,7 +492,7 @@ button.chip { cursor: pointer; }
   .pay-table thead { display: none; }
   .pay-table tr { display: grid; grid-template-columns: 30px 1fr auto; gap: 2px 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .pay-table td { border: 0; padding: 2px 0; }
-  .pay-table td:nth-child(3), .pay-table td:nth-child(4) { grid-column: 2 / 3; font-size: 13px; }
-  .pay-table td:nth-child(5) { grid-column: 3; grid-row: 1 / 4; align-self: center; }
+  .pay-table td:nth-child(3), .pay-table td:nth-child(4), .pay-table td:nth-child(5) { grid-column: 2 / 3; font-size: 13px; }
+  .pay-table td:nth-child(6) { grid-column: 3; grid-row: 1 / 5; align-self: center; }
   .pay-input { width: 104px; }
 }

@@ -129,3 +129,8 @@ create policy "rh: apagar" on storage.objects for delete to authenticated using 
 
 -- Férias já quitadas até (quantidade de períodos aquisitivos já tirados antes de usar o sistema)
 alter table public.employees add column if not exists vacation_periods_settled int not null default 0;
+
+-- Vale-alimentação e vale-transporte (valores por dia) e dias trabalhados por semana (semanalistas)
+alter table public.employees add column if not exists va_daily numeric(10, 2) not null default 0;
+alter table public.employees add column if not exists vt_daily numeric(10, 2) not null default 0;
+alter table public.employees add column if not exists work_days_week int not null default 6;

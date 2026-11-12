@@ -150,10 +150,29 @@ function payrollRows(type, refDate) {
       let base = isWeekly ? salary : type === 'M15' ? firstPart : salary - firstPart;
       const events = type === 'M15' ? [] : state.hrEvents.filter((x) => x.employee_id === e.id && x.date >= from && x.date <= to && toCents(x.amount) !== 0);
       const adj = events.reduce((s, x) => s + toCents(x.amount), 0);
+      // VA e VT: 15 dias por quinzena (mensalistas) ou os dias da semana (semanalistas), menos faltas/atestados do período
+      const bFrom = isWeekly ? from : type === 'M15' ? `${ym}-01` : `${ym}-16`;
+      const bTo = isWeekly ? to : type === 'M15' ? `${ym}-15` : `${ym}-${pad(lastDay(ym))}`;
+      const absent = state.hrEvents.filter((x) => x.employee_id === e.id && ['falta', 'atestado'].includes(x.kind))
+        .reduce((s, x) => s + overlapDays(x, bFrom, bTo), 0);
+      const fullDays = isWeekly ? Number(e.work_days_week || 6) : 15;
+      const days = Math.max(0, fullDays - absent);
+      const va = Math.round(toCents(e.va_daily || 0) * days), vt = Math.round(toCents(e.vt_daily || 0) * days);
       const ref = `${e.id}:${type}:${refDate}`;
-      return { emp: e, base, events, adj, total: Math.max(0, base + adj), ref, done: existing.has(ref) };
+      return { emp: e, base, events, adj, days, fullDays, absent, va, vt, total: Math.max(0, base + va + vt + adj), ref, done: existing.has(ref) };
     });
 }
+
+/** Dias de falta/atestado de uma ocorrência que caem dentro do período [from, to]. */
+function overlapDays(x, from, to) {
+  const start = x.date > from ? x.date : from;
+  const endEv = x.end_date && x.end_date >= x.date ? x.end_date : x.date;
+  const end = endEv < to ? endEv : to;
+  if (end < start) return 0;
+  if (!x.end_date || x.end_date === x.date) return Number(x.quantity) || 1; // falta de N dias lançada num dia só
+  return dateDiffDays(start, end) + 1;
+}
+const hasBenefitFields = () => !state.employees.length || 'va_daily' in state.employees[0];
 
 function payDateFor(type, month, week) {
   if (type === 'W') return week;
@@ -197,7 +216,7 @@ function rhFuncionarios() {
   return `
   <div class="grid cols-4">
     <div class="card stat"><div class="label">Funcionários ativos</div><div class="value">${active.length}</div><div class="sub">${monthly.length} mensal · ${weekly.length} semanal</div></div>
-    <div class="card stat"><div class="label">Folha mensal</div><div class="value">${money(monthly.reduce((s, e) => s + empCents(e), 0))}</div><div class="sub">mensalistas (dia 15 + dia 30)</div></div>
+    <div class="card stat"><div class="label">Folha mensal</div><div class="value">${money(monthly.reduce((s, e) => s + empCents(e), 0))}</div><div class="sub">salários · VA+VT ≈ ${money(monthly.reduce((s, e) => s + (toCents(e.va_daily || 0) + toCents(e.vt_daily || 0)) * 30, 0))}/mês</div></div>
     <div class="card stat"><div class="label">Semanais</div><div class="value">${money(weekly.reduce((s, e) => s + empCents(e), 0))}</div><div class="sub">por semana</div></div>
     <div class="card stat ${alerts.some((a) => a.level === 'danger') ? 'stat-danger' : alerts.length ? 'stat-warn' : ''}"><div class="label">Avisos</div><div class="value">${alerts.length}</div><div class="sub">experiência, férias, aniversários</div></div>
   </div>
@@ -256,15 +275,16 @@ function rhFolha() {
     <div class="chips-select" style="margin-bottom:12px">${Object.entries(label).map(([k, l]) => `<label class="chip-opt"><input type="radio" name="paytype" value="${k}" ${p.type === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
     <div class="filters">
       ${p.type === 'W' ? `<label class="inline">Dia do pagamento <input type="date" id="payWeek" value="${p.week}"></label>` : `<label class="inline">Mês <input type="month" id="payMonth" value="${p.month}"></label>`}
-      <div class="muted small" style="flex:2 1 260px">${p.type === 'W' ? `Semana de ${fmtDate(addDaysISO(date, -6))} a ${fmtDate(date)}` : p.type === 'M15' ? `Pagamento em ${fmtDate(date)}: a parte combinada de cada um (ex.: 40% ou 50%). Ajustes entram no dia 30.` : `Pagamento em ${fmtDate(date)}: restante do salário + horas extras/bônus − faltas/descontos/adiantamentos do mês.`}</div>
+      <div class="muted small" style="flex:2 1 260px">${p.type === 'W' ? `Semana de ${fmtDate(addDaysISO(date, -6))} a ${fmtDate(date)}` : p.type === 'M15' ? `Pagamento em ${fmtDate(date)}: a parte combinada do salário (ex.: 40% ou 50%) + VA/VT de 15 dias (1 a 15). Faltas, horas extras e outros ajustes entram no dia 30.` : `Pagamento em ${fmtDate(date)}: restante do salário + VA/VT de 15 dias (16 ao fim do mês) + horas extras/bônus − faltas/descontos/adiantamentos do mês.`}</div>
     </div>
   </div>
   <div class="card mt">
-    ${rows.length ? `<table class="pay-table"><thead><tr><th></th><th>Funcionário</th><th>Base</th><th>Ajustes</th><th>A pagar</th></tr></thead><tbody>
+    ${rows.length ? `<table class="pay-table"><thead><tr><th></th><th>Funcionário</th><th>Salário</th><th>VA + VT</th><th>Ajustes</th><th>A pagar</th></tr></thead><tbody>
       ${rows.map((r) => `<tr class="${r.done ? 'done' : ''}">
         <td>${r.done ? '✅' : `<input type="checkbox" data-payrow="${r.emp.id}" ${r.total > 0 ? 'checked' : ''}>`}</td>
         <td><b>${esc(r.emp.name)}</b><div class="tx-meta">${esc(r.emp.job_title || '')}${r.emp.pix_key ? ' · Pix' : r.emp.bank_info ? ' · transferência' : ' · <span class="neg">sem Pix/conta</span>'}</div></td>
         <td>${money(r.base)}</td>
+        <td>${r.va + r.vt ? `${money(r.va + r.vt)}<div class="tx-meta">${r.days} dia(s)${r.absent ? ` (−${r.absent} falta/atestado)` : ''}${r.va ? ` · VA ${money(r.va)}` : ''}${r.vt ? ` · VT ${money(r.vt)}` : ''}</div>` : '—'}</td>
         <td>${r.events.length ? `<span class="${r.adj >= 0 ? 'pos' : 'neg'}">${r.adj >= 0 ? '+' : '−'} ${money(Math.abs(r.adj))}</span><div class="tx-meta">${r.events.map((x) => `${HR_KINDS[x.kind].label}${Number(x.quantity) ? ` ${String(Number(x.quantity)).replace('.', ',')}${HR_KINDS[x.kind].unit === 'horas' ? 'h' : 'd'}` : ''}`).join(', ')}</div>` : '—'}</td>
         <td>${r.done ? `<span class="muted">já gerado</span>` : `<input class="pay-input" data-payval="${r.emp.id}" inputmode="decimal" value="${centsToInput(r.total)}">`}</td>
       </tr>`).join('')}</tbody></table>
@@ -300,12 +320,17 @@ async function generatePayroll() {
     const cents = parseMoney($(`[data-payval="${r.emp.id}"]`).value);
     if (cents <= 0) continue;
     const e = r.emp;
-    const desc = p.type === 'W' ? `Pagamento semanal (${fmtDate(addDaysISO(date, -6))} a ${fmtDate(date)})`
-      : p.type === 'M15' ? `Salário ${monthName(p.month).toLowerCase()} — 1ª parte (dia 15)` : `Salário ${monthName(p.month).toLowerCase()} — fechamento (dia 30)`;
+    const desc = (p.type === 'W' ? `Pagamento semanal (${fmtDate(addDaysISO(date, -6))} a ${fmtDate(date)})`
+      : p.type === 'M15' ? `Salário ${monthName(p.month).toLowerCase()} — 1ª parte (dia 15)` : `Salário ${monthName(p.month).toLowerCase()} — fechamento (dia 30)`)
+      + (r.va || r.vt ? ` + ${[r.va ? 'VA' : '', r.vt ? 'VT' : ''].filter(Boolean).join('/')}` : '');
     bills.push({
       id: uuid(), supplier: e.name, description: desc, area_id: area?.id || null, purchase_date: date, edition: state.settings.edition,
       amount: cents / 100, due_date: date, method: e.pix_key ? 'pix' : 'transferencia', pix_key: e.pix_key || '', bank_info: e.pix_key ? '' : e.bank_info || '',
-      notes: r.events.map((x) => `${HR_KINDS[x.kind].label} ${fmtDate(x.date)}: ${toCents(x.amount) >= 0 ? '+' : '−'}${money(Math.abs(toCents(x.amount)))}`).join(' · '),
+      notes: [`Salário: ${money(r.base)}`,
+        r.va ? `Vale-alimentação: ${r.days} dia(s) = ${money(r.va)}` : '',
+        r.vt ? `Vale-transporte: ${r.days} dia(s) = ${money(r.vt)}` : '',
+        ...r.events.map((x) => `${HR_KINDS[x.kind].label} ${fmtDate(x.date)}: ${toCents(x.amount) >= 0 ? '+' : '−'}${money(Math.abs(toCents(x.amount)))}`),
+        cents !== r.total ? `Valor ajustado na folha: ${money(cents)}` : ''].filter(Boolean).join(' · '),
       employee_id: e.id, payroll_ref: r.ref, attachments: [],
     });
   }
@@ -334,6 +359,8 @@ function openEmployee(id) {
     <dl class="detail">
       <dt>Situação</dt><dd>${e.status === 'active' ? 'Ativo' : `Desligado em ${fmtDate(e.termination_date)}`}</dd>
       <dt>Admissão</dt><dd>${fmtDate(e.admission_date)}${exp.length ? ' · ' + exp.map((x) => `${x.label.replace(/ \(.*/, '')}: ${fmtDate(x.date)}`).join(' · ') : ''}</dd>
+      ${toCents(e.va_daily || 0) || toCents(e.vt_daily || 0) ? `<dt>VA / VT</dt><dd>${toCents(e.va_daily || 0) ? `VA ${money(toCents(e.va_daily))}/dia` : ''}${toCents(e.va_daily || 0) && toCents(e.vt_daily || 0) ? ' · ' : ''}${toCents(e.vt_daily || 0) ? `VT ${money(toCents(e.vt_daily))}/dia` : ''}
+        <span class="muted">(${e.pay_type === 'weekly' ? `${Number(e.work_days_week || 6)} dias por semana` : '15 dias por quinzena'})</span></dd>` : ''}
       ${e.cpf ? `<dt>CPF</dt><dd>${esc(fmtCpf(e.cpf))}</dd>` : ''}
       ${e.phone ? `<dt>Telefone</dt><dd>${esc(e.phone)}</dd>` : ''}
       ${e.birth_date ? `<dt>Nascimento</dt><dd>${fmtDate(e.birth_date)}</dd>` : ''}
@@ -391,6 +418,12 @@ function openEmployeeForm(emp) {
       <label class="field"><span id="salLabel">Salário mensal (R$) *</span><input class="amount-input" name="salary" inputmode="decimal" value="${toCents(e.salary) ? centsToInput(toCents(e.salary)) : ''}" required></label>
       <label class="field" data-pt="monthly"><span>% pago no dia 15</span><input type="number" name="first_pay_percent" min="0" max="100" step="1" value="${Number(e.first_pay_percent)}"><small class="muted" id="splitHint"></small></label>
       <label class="field" data-pt="weekly"><span>Dia do pagamento</span><select name="pay_weekday">${WEEKDAYS.map((w, i) => `<option value="${i}" ${Number(e.pay_weekday) === i ? 'selected' : ''}>${w}</option>`).join('')}</select></label>
+      ${hasBenefitFields() ? `
+      <div class="field full pay-section"><span class="pay-title">🍽️🚌 Vale-alimentação e vale-transporte</span></div>
+      <label class="field"><span>Vale-alimentação por dia (R$)</span><input name="va_daily" inputmode="decimal" placeholder="0,00" value="${toCents(e.va_daily || 0) ? centsToInput(toCents(e.va_daily)) : ''}"></label>
+      <label class="field"><span>Vale-transporte por dia (R$)</span><input name="vt_daily" inputmode="decimal" placeholder="0,00" value="${toCents(e.vt_daily || 0) ? centsToInput(toCents(e.vt_daily)) : ''}"></label>
+      <label class="field" data-pt="weekly"><span>Dias trabalhados por semana</span><input type="number" name="work_days_week" min="1" max="7" value="${Number(e.work_days_week || 6)}"></label>
+      <small class="muted full" id="benefitHint" style="margin-top:-6px"></small>` : ''}
       <label class="field full"><span>Chave Pix</span><input name="pix_key" value="${esc(e.pix_key)}" autocomplete="off"></label>
       <label class="field full"><span>Dados bancários (se não tiver Pix)</span><textarea name="bank_info" rows="2">${esc(e.bank_info)}</textarea></label>
       ${isEdit ? `<label class="field"><span>Situação</span><select name="status"><option value="active" ${e.status === 'active' ? 'selected' : ''}>Ativo</option><option value="terminated" ${e.status === 'terminated' ? 'selected' : ''}>Desligado</option></select></label>
@@ -422,6 +455,7 @@ function openEmployeeForm(emp) {
       admission_date: fd.get('admission_date'), experience_days: Number(fd.get('experience_days')), pay_type: fd.get('pay_type'),
       salary: salary / 100, first_pay_percent: Number(fd.get('first_pay_percent') || 50), pay_weekday: Number(fd.get('pay_weekday') || 5),
       ...(hasSettledField() ? { vacation_periods_settled: Number(fd.get('vacation_periods_settled') || 0) } : {}),
+      ...(hasBenefitFields() ? { va_daily: parseMoney(fd.get('va_daily')) / 100, vt_daily: parseMoney(fd.get('vt_daily')) / 100, work_days_week: Math.min(7, Math.max(1, Number(fd.get('work_days_week') || 6))) } : {}),
       pix_key: fd.get('pix_key').trim(), bank_info: fd.get('bank_info').trim(), notes: fd.get('notes').trim(),
       status, termination_date: status === 'terminated' ? (fd.get('termination_date') || todayISO()) : null,
       attachments: [...atts, ...newAtts],
@@ -432,9 +466,11 @@ function openEmployeeForm(emp) {
       api.deleteFiles(removed, 'rh');
     } else {
       try { await api.insert('employees', { id, ...data }); }
-      catch (err) { // banco sem o campo de férias quitadas (script supabase-rh-ferias.sql ainda não rodado)
-        if (!/vacation_periods_settled/.test(err.message)) throw err;
-        delete data.vacation_periods_settled; await api.insert('employees', { id, ...data });
+      catch (err) { // banco sem algum campo novo (script de férias/benefícios ainda não rodado)
+        const missing = ['vacation_periods_settled', 'va_daily', 'vt_daily', 'work_days_week'].filter((k) => err.message.includes(k));
+        if (!missing.length) throw err;
+        ['vacation_periods_settled', 'va_daily', 'vt_daily', 'work_days_week'].forEach((k) => delete data[k]);
+        await api.insert('employees', { id, ...data });
       }
     }
     toast(isEdit ? 'Funcionário atualizado' : 'Funcionário cadastrado ✅');
@@ -446,10 +482,16 @@ function openEmployeeForm(emp) {
       $('#salLabel').textContent = t === 'weekly' ? 'Valor por semana (R$) *' : 'Salário mensal (R$) *';
       const s = parseMoney($('[name=salary]', modalForm).value); const pct = Number($('[name=first_pay_percent]', modalForm).value || 0);
       $('#splitHint').textContent = s && t === 'monthly' ? `Dia 15: ${money(Math.round((s * pct) / 100))} · Dia 30: ${money(s - Math.round((s * pct) / 100))}` : '';
+      const bh = $('#benefitHint');
+      if (bh) {
+        const va = parseMoney($('[name=va_daily]', modalForm).value), vt = parseMoney($('[name=vt_daily]', modalForm).value);
+        const d = t === 'weekly' ? Number($('[name=work_days_week]', modalForm).value || 6) : 15;
+        bh.innerHTML = va || vt ? `Por ${t === 'weekly' ? `semana (${d} dias)` : 'quinzena (15 dias), no dia 15 e no dia 30'}: ${va ? `VA <b>${money(va * d)}</b>` : ''}${va && vt ? ' + ' : ''}${vt ? `VT <b>${money(vt * d)}</b>` : ''} · faltas e atestados descontam os dias.` : 'Deixe em branco se não recebe.';
+      }
       const st = $('[name=status]', modalForm); if (st) $('#termWrap2').style.display = st.value === 'terminated' ? '' : 'none';
     };
     $$('[name=pay_type], [name=status]', modalForm).forEach((x) => x.addEventListener('change', sync));
-    $$('[name=salary], [name=first_pay_percent]', modalForm).forEach((x) => x.addEventListener('input', sync));
+    $$('[name=salary], [name=first_pay_percent], [name=va_daily], [name=vt_daily], [name=work_days_week]', modalForm).forEach((x) => x.addEventListener('input', sync));
     const showFiles = () => { const f = [...$('[name="f_doc"]', modalForm).files].map((x) => x.name); $('#newFiles').textContent = f.length ? `Novos: ${f.join(', ')}` : ''; };
     $('[name="f_doc"]', modalForm).addEventListener('change', showFiles);
     const bindRm = () => { bindAttachments($('#attBox')); $$('[data-rmatt]', modalForm).forEach((x) => x.addEventListener('click', () => { atts.splice(Number(x.dataset.rmatt), 1); $('#attBox').innerHTML = attachmentList(atts, true); bindRm(); })); };
