@@ -63,8 +63,9 @@ O porteiro cria o acesso no celular/tablet e o administrador o aprova como **Por
 4. **Project Settings → API Keys:** copie o **Project URL** e a chave **publishable** (ou *anon public*) para
    [`config.js`](config.js). (Nunca use a chave *secret*/*service_role*.)
 5. **GitHub → Settings → Pages → Source: GitHub Actions.** O site é publicado a cada alteração na branch `main`.
-6. O administrador abre o site e toca em **Criar acesso** primeiro. Depois envia o endereço para a equipe e
-   aprova cada pessoa em **Equipe**.
+6. O administrador abre o site e toca em **Criar acesso** primeiro. Depois, em **Equipe → + Convidar pessoa**, gera um
+   link para cada pessoa (com a função já escolhida) e manda pelo WhatsApp. Quem abre o link cria a senha e já entra,
+   sem precisar de aprovação. (Também dá para mandar só o endereço do site e aprovar cada pedido em **Equipe**.)
 
 ## Arquivos
 

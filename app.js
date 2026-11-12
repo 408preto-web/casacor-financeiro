@@ -115,6 +115,7 @@ async function loadAll({ quiet = false } = {}) {
     Object.assign(state, { members, areas, cards, settings: settings[0] || { edition: '' }, bills: bills.map(normBill), loadedAt: Date.now() });
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
     await loadGate(); // portaria da obra (portaria.js)
+    state.invites = me?.role === 'admin' ? await api.select('invites', 'select=*&used_at=is.null&order=created_at.desc').catch(() => null) : null;
     ui.offline = false;
     saveCache();
     if (!me || !['member', 'payer', 'admin', 'gate'].includes(me.role)) return boot();
@@ -173,6 +174,50 @@ function gateLogin(mode = 'login', msg = '') {
       await afterLogin(signup ? fd.get('name').trim() : '');
     } catch (err) { gateLogin(mode, err.message); }
   });
+}
+
+/* Convite: link #convite=TOKEN&nome=…&funcao=… enviado pela administração (WhatsApp) */
+const INVITE_KEY = 'casacor-convite';
+function pendingInvite() { try { return JSON.parse(sessionStorage.getItem(INVITE_KEY)); } catch { return null; } }
+function gateInvite(mode = 'signup', msg = '') {
+  const inv = pendingInvite(); const signup = mode === 'signup';
+  const first = (inv.name || '').split(' ')[0];
+  showGate(`
+    <h2>Olá${first ? ', ' + esc(first) : ''}! 👋</h2>
+    <p class="muted" style="margin-top:-4px">Você foi convidado(a) para o sistema da Casa Cor Ceará${ROLES[inv.role] ? ' como <b>' + esc(ROLES[inv.role].label) + '</b>' : ''}. ${signup ? 'Só falta criar sua senha.' : 'Entre com seu e-mail e senha.'}</p>
+    <form id="gateForm" class="form-grid one">
+      ${signup ? `<label class="field"><span>Seu nome</span><input name="name" autocomplete="name" required value="${esc(inv.name || '')}"></label>` : ''}
+      <label class="field"><span>E-mail</span><input name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" required></label>
+      <label class="field"><span>${signup ? 'Crie uma senha (mínimo 6 letras ou números)' : 'Senha'}</span><input name="password" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}" required minlength="6"></label>
+      ${msg ? `<p class="gate-msg">${esc(msg)}</p>` : ''}
+      <button class="btn primary big">${signup ? 'Criar meu acesso' : 'Entrar'}</button>
+      <button type="button" class="link-btn" id="invSwitch">${signup ? 'Já tenho acesso — entrar' : 'Ainda não tenho acesso — criar'}</button>
+    </form>`);
+  $('#invSwitch').addEventListener('click', () => gateInvite(signup ? 'login' : 'signup'));
+  $('#gateForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const btn = $('button.primary', e.target); btn.disabled = true; btn.textContent = 'Aguarde…';
+    try {
+      if (signup) await api.signUp(fd.get('email').trim(), fd.get('password'), fd.get('name').trim());
+      else await api.signIn(fd.get('email').trim(), fd.get('password'));
+    } catch (err) {
+      return gateInvite(mode, /already|registered|cadastrad/i.test(err.message) ? 'Este e-mail já tem acesso. Toque em “Já tenho acesso — entrar”.' : err.message);
+    }
+    acceptInvite(signup ? fd.get('name').trim() : '');
+  });
+}
+async function acceptInvite(name = '') {
+  const inv = pendingInvite();
+  try {
+    await api.rpc('accept_invite', { p_token: inv.token, p_name: name || inv.name || '' });
+    sessionStorage.removeItem(INVITE_KEY);
+    afterLogin(name);
+  } catch (e) {
+    sessionStorage.removeItem(INVITE_KEY);
+    showGate(`<h2>Convite não aceito</h2><p class="muted">${esc(e.message)}</p><button class="btn" id="out">Voltar</button>`);
+    $('#out').addEventListener('click', () => { api.signOut(); gateLogin(); });
+  }
 }
 
 function gateForgot() {
@@ -256,6 +301,11 @@ async function boot() {
     history.replaceState(null, '', location.pathname);
     return gateNewPassword(h.get('access_token'));
   }
+  if (h.get('convite')) {
+    sessionStorage.setItem(INVITE_KEY, JSON.stringify({ token: h.get('convite'), name: h.get('nome') || '', role: h.get('funcao') || '' }));
+    history.replaceState(null, '', location.pathname);
+  }
+  if (pendingInvite()) return api.session() ? acceptInvite() : gateInvite();
   if (!api.session()) return gateLogin();
   loadCache();
   if (state.me && ['member', 'payer', 'admin', 'gate'].includes(state.me.role) && state.bills) {
@@ -603,10 +653,18 @@ function renderEquipe() {
     </div>
   </div>
   ${blocked.length && isAdmin() ? `<div class="card mt"><h2>Sem acesso</h2><ul class="tx-list">${blocked.map(row).join('')}</ul></div>` : ''}
-  <div class="card mt"><h2>Convidar alguém</h2>
-    <p class="muted">Envie o endereço do sistema. A pessoa toca em <b>Criar acesso</b>, e você aprova aqui.</p>
+  ${isAdmin() && state.invites ? `<div class="card mt"><div class="card-head"><h2>Convidar alguém</h2><button class="btn small primary" id="newInvite">+ Convidar pessoa</button></div>
+    <p class="muted">Gere um link e mande pelo WhatsApp. A pessoa abre, cria a senha e já entra com a função escolhida — sem precisar aprovar.</p>
+    ${state.invites.length ? `<ul class="tx-list">${state.invites.map((i) => `<li class="member-row">
+      <div class="avatar">✉️</div>
+      <div class="tx-main"><div class="tx-title">${esc(i.name)} <span class="badge open">${esc(ROLES[i.role]?.label || i.role)}</span></div>
+        <div class="tx-meta">${new Date(i.expires_at) < new Date() ? 'convite vencido' : 'aguardando · vale até ' + new Date(i.expires_at).toLocaleDateString('pt-BR')}</div></div>
+      <div class="row-actions"><button class="btn small" data-invlink="${i.token}">Ver link</button><button class="btn small" data-invdel="${i.token}">Cancelar</button></div>
+    </li>`).join('')}</ul>` : ''}
+  </div>` : `<div class="card mt"><h2>Convidar alguém</h2>
+    <p class="muted">Envie o endereço do sistema. A pessoa toca em <b>Criar acesso</b>, e a administração aprova aqui.</p>
     <div class="copy-field"><code id="appUrl">${esc(location.origin + location.pathname)}</code><button class="btn small" data-copy="appUrl">Copiar</button></div>
-  </div>`;
+  </div>`}`;
 }
 
 /* ---------- Ajustes ---------- */
@@ -676,6 +734,12 @@ function bindView() {
       } catch (e) { toast(e.message); render(); }
     }));
     $$('[data-approve]', v).forEach((b) => b.addEventListener('click', () => openApprove(b.dataset.approve)));
+    $('#newInvite')?.addEventListener('click', openInviteForm);
+    $$('[data-invlink]', v).forEach((b) => b.addEventListener('click', () => showInviteLink(state.invites.find((i) => i.token === b.dataset.invlink))));
+    $$('[data-invdel]', v).forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Cancelar este convite? O link deixa de funcionar.')) return;
+      try { await api.remove('invites', `token=eq.${b.dataset.invdel}`); toast('Convite cancelado'); await loadAll({ quiet: true }); render(); } catch (e) { toast(e.message); }
+    }));
     $$('[data-reject]', v).forEach((b) => b.addEventListener('click', () => setRole(b.dataset.reject, 'blocked', 'Acesso recusado')));
     $$('[data-role]', v).forEach((s) => s.addEventListener('change', () => setRole(s.dataset.role, s.value, 'Função alterada')));
     $$('[data-editmember]', v).forEach((b) => b.addEventListener('click', () => openMemberForm(state.members.find((m) => m.user_id === b.dataset.editmember))));
@@ -1079,6 +1143,39 @@ function openApprove(userId) {
     await api.update('members', `user_id=eq.${userId}`, { name: fd.get('name').trim(), role: fd.get('role'), area: fd.get('area') });
     toast('Acesso aprovado ✅'); await loadAll({ quiet: true }); render();
   });
+}
+
+function openInviteForm() {
+  openModal(`
+    <h2>Convidar pessoa</h2>
+    <div class="form-grid one">
+      <label class="field"><span>Nome</span><input name="name" required placeholder="Ex.: Amsterdã"></label>
+      <label class="field"><span>Função</span><select name="role">
+        <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
+      <p class="muted small" style="margin:0">Administrador e acesso ao RH você libera depois, aqui em Equipe.</p>
+    </div>
+    <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Gerar convite</button></div>`,
+  async (action, fd) => {
+    const [inv] = await api.insert('invites', { name: fd.get('name').trim(), role: fd.get('role') });
+    await loadAll({ quiet: true }); render();
+    setTimeout(() => showInviteLink(inv), 0);
+  });
+}
+
+function inviteUrl(i) {
+  return `${location.origin}${location.pathname}#convite=${i.token}&nome=${encodeURIComponent(i.name)}&funcao=${i.role}`;
+}
+
+function showInviteLink(i) {
+  const url = inviteUrl(i); const first = i.name.split(' ')[0];
+  const msg = `Olá, ${first}! Este é o seu acesso ao sistema da Casa Cor Ceará${i.role === 'gate' ? ' (portaria da obra)' : ''}. Toque no link, coloque seu e-mail e crie uma senha:\n${url}`;
+  openModal(`
+    <h2>✉️ Convite de ${esc(i.name)}</h2>
+    <p class="muted" style="margin-top:-6px">${esc(ROLES[i.role]?.label || '')} · o link vale por 7 dias e só pode ser usado uma vez.</p>
+    <a class="btn primary big wa-btn" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">📲 Enviar pelo WhatsApp</a>
+    <div class="copy-field"><code id="invUrl">${esc(url)}</code><button type="button" class="btn small" id="invCopy">Copiar</button></div>
+    <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Fechar</button></div>`,
+  () => {}, () => $('#invCopy').addEventListener('click', () => copyText(url)));
 }
 
 async function setRole(userId, role, msg) {

@@ -565,3 +565,4 @@ button.chip { cursor: pointer; }
   .g-table tr { display: table-row; }
   .g-table td { display: table-cell; padding: 8px 6px; }
 }
+.btn.wa-btn { display: flex; align-items: center; justify-content: center; width: 100%; margin: 6px 0 10px; background: #1f8f4e; border-color: #1f8f4e; color: #fff; text-decoration: none; }

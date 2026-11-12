@@ -103,3 +103,46 @@ drop policy if exists "entradas: excluir" on public.gate_entries;
 create policy "entradas: excluir" on public.gate_entries for delete using (public.is_admin());
 
 grant select, insert, update, delete on public.gate_envs, public.gate_people, public.gate_entries to authenticated;
+
+-- ---------- Convites (link pelo WhatsApp: a pessoa entra já com a função certa, sem esperar aprovação) ----------
+create table if not exists public.invites (
+  token      uuid        primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  name       text        not null,
+  role       text        not null check (role in ('member', 'payer', 'gate')),
+  created_by uuid        default auth.uid(),
+  used_by    uuid,
+  used_at    timestamptz,
+  expires_at timestamptz not null default now() + interval '7 days'
+);
+alter table public.invites enable row level security;
+drop policy if exists "convites: administração" on public.invites;
+create policy "convites: administração" on public.invites for all using (public.is_admin()) with check (public.is_admin());
+grant select, insert, delete on public.invites to authenticated;
+
+create or replace function public.accept_invite(p_token uuid, p_name text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  inv public.invites;
+  r text;
+begin
+  if auth.uid() is null then
+    raise exception 'não autenticado';
+  end if;
+  select role into r from public.members where user_id = auth.uid();
+  if r in ('member', 'payer', 'admin', 'gate') then
+    return r; -- já tem acesso: o convite fica livre
+  end if;
+  select * into inv from public.invites
+   where token = p_token and used_at is null and expires_at > now() for update;
+  if not found then
+    raise exception 'Este convite já foi usado ou venceu. Peça um novo para a administração.';
+  end if;
+  delete from public.members where user_id = auth.uid(); -- pedido pendente (ou recusado) é substituído pelo convite
+  insert into public.members (user_id, email, name, role)
+  values (auth.uid(), coalesce(auth.jwt() ->> 'email', ''), coalesce(nullif(trim(p_name), ''), inv.name), inv.role);
+  update public.invites set used_by = auth.uid(), used_at = now() where token = inv.token;
+  return inv.role;
+end;
+$$;
+grant execute on function public.accept_invite(uuid, text) to authenticated;
