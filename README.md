@@ -21,6 +21,7 @@ e o financeiro ver o que vence e marcar como pago.
 | **Comprador** | ✅ | — | — |
 | **Pagador** | ✅ | ✅ | — |
 | **Administrador** | ✅ | ✅ | ✅ |
+| **Porteiro** | — | — | — (vê só a Portaria da obra) |
 
 Todos da equipe veem todas as contas. Quem cria um acesso fica **aguardando aprovação** e não vê nada até ser aprovado.
 A **primeira pessoa** a criar acesso vira administradora.
@@ -38,6 +39,19 @@ nem as contas de salário (área **Pessoal**) — inclusive nas listas e relató
 - **Folha:** gera as contas a pagar do dia 15, do dia 30 (restante + ajustes do mês) ou da semana, com conferência antes
   e sem permitir gerar o mesmo pagamento duas vezes.
 - **Avisos:** fim da experiência, férias com prazo-limite (e vencidas) e aniversários.
+
+## 🚧 Portaria da obra
+
+Ative rodando [`supabase-portaria.sql`](supabase-portaria.sql) no SQL Editor (depois dos anteriores).
+O porteiro cria o acesso no celular/tablet e o administrador o aprova como **Porteiro**: ele vê **só** a portaria
+(nada de contas, RH ou equipe).
+
+- **Entrada:** busca por nome ou CPF → (pessoa nova: nome, CPF validado, empresa) → toca no **ambiente** → toca no
+  **trabalho** → **Confirmar**. Quem já veio antes entra com um toque (repete o último ambiente e trabalho).
+- **Saída:** lista de quem está na obra, com **SAIU** por pessoa e **Fim do dia: saída de todos**.
+- **Bloqueio:** a equipe pode bloquear uma pessoa (com motivo); o porteiro vê **NÃO PERMITIR A ENTRADA**.
+- **Equipe (abas):** relatório por dia (por ambiente e por empresa, exporta CSV), cadastro dos **ambientes**
+  (número, nome, arquiteto) e das **pessoas** (importar a equipe do RH, marcar crachá, bloquear).
 
 ## Configuração (uma vez)
 
@@ -63,3 +77,4 @@ nem as contas de salário (área **Pessoal**) — inclusive nas listas e relató
 | `supabase.sql` | Tabelas, permissões (RLS) e armazenamento de anexos |
 | `rh.js`, `supabase-rh.sql` | Módulo de RH (funcionários, ocorrências, folha, avisos) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalação como app |
+| `portaria.js`, `supabase-portaria.sql` | Portaria da obra (entradas, saídas, ambientes, relatório) |

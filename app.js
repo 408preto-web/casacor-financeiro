@@ -63,6 +63,7 @@ const ROLES = {
   admin: { label: 'Administrador', desc: 'lança, paga e gerencia a equipe' },
   payer: { label: 'Pagador', desc: 'lança e paga contas' },
   member: { label: 'Comprador', desc: 'lança contas' },
+  gate: { label: 'Porteiro', desc: 'só a portaria da obra' },
   pending: { label: 'Aguardando aprovação', desc: '' },
   blocked: { label: 'Sem acesso', desc: '' },
 };
@@ -113,9 +114,10 @@ async function loadAll({ quiet = false } = {}) {
     if (me) state.me = me;
     Object.assign(state, { members, areas, cards, settings: settings[0] || { edition: '' }, bills: bills.map(normBill), loadedAt: Date.now() });
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
+    await loadGate(); // portaria da obra (portaria.js)
     ui.offline = false;
     saveCache();
-    if (!me || !['member', 'payer', 'admin'].includes(me.role)) return boot();
+    if (!me || !['member', 'payer', 'admin', 'gate'].includes(me.role)) return boot();
     if (!modal.open && !document.activeElement?.matches?.('input, textarea, select')) render();
     else updateBadges();
   } catch (e) {
@@ -256,7 +258,7 @@ async function boot() {
   }
   if (!api.session()) return gateLogin();
   loadCache();
-  if (state.me && ['member', 'payer', 'admin'].includes(state.me.role) && state.bills) {
+  if (state.me && ['member', 'payer', 'admin', 'gate'].includes(state.me.role) && state.bills) {
     startApp(); // mostra o que já tinha enquanto atualiza
     return loadAll({ quiet: true });
   }
@@ -264,7 +266,7 @@ async function boot() {
 }
 
 /* ---------- Navegação ---------- */
-const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', equipe: 'Equipe', ajustes: 'Ajustes' };
+const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', portaria: 'Portaria da obra', equipe: 'Equipe', ajustes: 'Ajustes' };
 function setView(v) {
   ui.view = v;
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
@@ -277,8 +279,11 @@ function render() {
   $('#fab').hidden = false;
   $('#sidebarUser').innerHTML = `<b>${esc(state.me.name)}</b><span>${ROLES[state.me.role]?.label || ''}</span>`;
   if (ui.view === 'rh' && !isHR()) ui.view = 'painel';
+  // Porteiro: só a tela da portaria, grande e simples
+  document.body.classList.toggle('gate-mode', isGateOnly());
+  if (isGateOnly()) ui.view = 'portaria';
   $('.nav-item[data-view="rh"]').hidden = !isHR();
-  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, equipe: renderEquipe, ajustes: renderAjustes };
+  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, portaria: renderPortaria, equipe: renderEquipe, ajustes: renderAjustes };
   $('#view').innerHTML = views[ui.view]();
   bindView();
   updateBadges(); updatePill();
@@ -576,7 +581,7 @@ function renderEquipe() {
   const pending = state.members.filter((m) => m.role === 'pending');
   const active = state.members.filter((m) => !['pending', 'blocked'].includes(m.role));
   const blocked = state.members.filter((m) => m.role === 'blocked');
-  const roleSel = (m) => `<select data-role="${m.user_id}" ${isAdmin() ? '' : 'disabled'}>${['member', 'payer', 'admin', 'blocked'].map((r) => `<option value="${r}" ${m.role === r ? 'selected' : ''}>${ROLES[r].label}</option>`).join('')}</select>`;
+  const roleSel = (m) => `<select data-role="${m.user_id}" ${isAdmin() ? '' : 'disabled'}>${['member', 'payer', 'admin', 'gate', 'blocked'].map((r) => `<option value="${r}" ${m.role === r ? 'selected' : ''}>${ROLES[r].label}</option>`).join('')}</select>`;
   const row = (m) => `<li class="member-row">
       <div class="avatar">${esc((m.name || '?').charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-title">${esc(m.name)}${m.user_id === state.me.user_id ? ' <span class="muted">(você)</span>' : ''}</div>
@@ -659,6 +664,7 @@ function bindView() {
     $('#rto').addEventListener('change', (e) => { ui.report.to = e.target.value; render(); });
     $('#csv').addEventListener('click', exportCsv);
   }
+  if (ui.view === 'portaria') bindPortaria(v);
   if (ui.view === 'rh') bindRH(v);
   else $$('[data-emp]', v).forEach((el) => el.addEventListener('click', () => openEmployee(el.dataset.emp)));
   $$('[data-genfolha]', v).forEach((b) => b.addEventListener('click', () => { const [t, d] = b.dataset.genfolha.split('|'); goToPayroll(t, d); }));
@@ -1065,7 +1071,7 @@ function openApprove(userId) {
     <div class="form-grid one">
       <label class="field"><span>Nome</span><input name="name" value="${esc(m.name)}" required></label>
       <label class="field"><span>Função</span><select name="role">
-        <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="admin">Administrador — tudo</option></select></label>
+        <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="admin">Administrador — tudo</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
       <label class="field"><span>Área principal (sugerida ao lançar)</span><select name="area"><option value="">—</option>${state.areas.map((a) => `<option>${esc(a.name)}</option>`).join('')}</select></label>
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Aprovar</button></div>`,
@@ -1114,7 +1120,7 @@ function openEditionForm() {
 
 /* ---------- Atalhos ---------- */
 document.addEventListener('keydown', (e) => {
-  if (modal.open || $('#app').hidden || e.target.matches('input, textarea, select')) return;
+  if (modal.open || $('#app').hidden || e.target.matches('input, textarea, select') || isGateOnly()) return;
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openBillForm(); }
   const map = { 1: 'painel', 2: 'contas', 3: 'cartoes', 4: 'relatorios', 5: 'equipe', 6: 'ajustes' };
   if (map[e.key]) setView(map[e.key]);
