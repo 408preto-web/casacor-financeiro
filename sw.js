@@ -1,5 +1,5 @@
 // Service worker: guarda os arquivos do app para abrir rápido e funcionar com internet instável.
-const CACHE = 'casacor-pagamentos-v9';
+const CACHE = 'casacor-pagamentos-v10';
 const ASSETS = ['./', 'index.html', 'styles.css', 'config.js', 'api.js', 'rh.js', 'portaria.js', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
@@ -13,7 +13,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-cache' }) // sempre confere se há versão nova (o GitHub Pages guarda por 10 min)
       .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html')))
   );

@@ -1223,5 +1223,20 @@ document.addEventListener('keydown', (e) => {
   if (map[e.key]) setView(map[e.key]);
 });
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  // Versão nova publicada: recarrega sozinho (sem atrapalhar quem está digitando ou com uma janela aberta).
+  let reloading = false;
+  const reloadWhenIdle = () => {
+    if (reloading) return;
+    if (modal.open || document.activeElement?.matches?.('input, textarea, select')) return setTimeout(reloadWhenIdle, 5000);
+    reloading = true; location.reload();
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) reloadWhenIdle(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {});
+  });
+  setInterval(() => navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {}), 15 * 60 * 1000);
+}
 boot();
