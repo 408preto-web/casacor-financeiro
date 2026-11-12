@@ -126,3 +126,6 @@ drop policy if exists "rh: apagar" on storage.objects;
 create policy "rh: apagar" on storage.objects for delete to authenticated using (bucket_id = 'rh' and public.is_hr());
 
 -- Obs.: a administração já tem acesso ao RH automaticamente (pela função is_hr).
+
+-- Férias já quitadas até (quantidade de períodos aquisitivos já tirados antes de usar o sistema)
+alter table public.employees add column if not exists vacation_periods_settled int not null default 0;

@@ -72,14 +72,31 @@ function vacationInfo(e, ref = todayISO()) {
   let months = (ry - ay) * 12 + (rm - am) - (rd < ad ? 1 : 0);
   const completed = Math.max(0, Math.floor(months / 12));
   const taken = state.hrEvents.filter((x) => x.employee_id === e.id && x.kind === 'ferias').reduce((s, x) => s + Number(x.quantity || 0), 0);
-  const used = Math.floor(taken / 30);
+  const settled = Number(e.vacation_periods_settled || 0); // períodos quitados antes de usar o sistema
+  const used = settled + Math.floor(taken / 30);
   const owed = Math.max(0, completed - used);
   const k = used; // índice do período mais antigo ainda não gozado
+  const periodStart = addMonthsISO(e.admission_date, 12 * k);
   const periodEnd = addDaysISO(addMonthsISO(e.admission_date, 12 * (k + 1)), -1);
   const limit = addDaysISO(addMonthsISO(e.admission_date, 12 * (k + 2)), -1);
   const nextComplete = addDaysISO(addMonthsISO(e.admission_date, 12 * (completed + 1)), -1);
-  return { completed, taken, owed, periodEnd, limit, nextComplete };
+  return { completed, taken, settled, owed, periodStart, periodEnd, limit, nextComplete };
 }
+
+/** Períodos aquisitivos completos desde a admissão (para o campo "Férias já quitadas até"). */
+function completedPeriods(admission, ref = todayISO()) {
+  if (!admission) return [];
+  const out = [];
+  for (let i = 1; i <= 80; i++) {
+    const end = addDaysISO(addMonthsISO(admission, 12 * i), -1);
+    if (end >= ref) break;
+    out.push({ n: i, start: addMonthsISO(admission, 12 * (i - 1)), end, limit: addDaysISO(addMonthsISO(admission, 12 * (i + 1)), -1) });
+  }
+  return out;
+}
+/** Sugestão: quitados os períodos cujo prazo para tirar já passou (em aberto só o que ainda está no prazo). */
+const suggestedSettled = (admission) => completedPeriods(admission).filter((p) => p.limit < todayISO()).length;
+const hasSettledField = () => !state.employees.length || 'vacation_periods_settled' in state.employees[0];
 
 /** Avisos de RH: experiência, férias e aniversários. */
 function rhAlerts() {
@@ -320,7 +337,11 @@ function openEmployee(id) {
       ${e.cpf ? `<dt>CPF</dt><dd>${esc(fmtCpf(e.cpf))}</dd>` : ''}
       ${e.phone ? `<dt>Telefone</dt><dd>${esc(e.phone)}</dd>` : ''}
       ${e.birth_date ? `<dt>Nascimento</dt><dd>${fmtDate(e.birth_date)}</dd>` : ''}
-      <dt>Férias</dt><dd>${v.completed ? `${v.completed} período(s) completo(s) · ${v.taken} dia(s) tirados · ${v.owed ? `<b class="${dateDiffDays(todayISO(), v.limit) < 0 ? 'neg' : ''}">${v.owed} em aberto, tirar até ${fmtDate(v.limit)}</b>` : 'em dia'}` : `1º período completa em ${fmtDate(v.nextComplete)}`}</dd>
+      <dt>Férias</dt><dd>${v.completed ? (v.owed
+        ? `<b class="${dateDiffDays(todayISO(), v.limit) < 0 ? 'neg' : ''}">${v.owed} período(s) em aberto</b> — o mais antigo: ${fmtDate(v.periodStart)} a ${fmtDate(v.periodEnd)}, <b>tirar até ${fmtDate(v.limit)}</b>`
+        : `Em dia ✅ · próximo período completa em ${fmtDate(v.nextComplete)}`)
+        + `<br><span class="muted small">${v.settled ? `${v.settled} período(s) quitado(s) antes do sistema` : ''}${v.settled && v.taken ? ' · ' : ''}${v.taken ? `${v.taken} dia(s) de férias lançados` : ''}</span>`
+        : `1º período completa em ${fmtDate(v.nextComplete)}`}</dd>
       ${e.notes ? `<dt>Observações</dt><dd>${esc(e.notes)}</dd>` : ''}
     </dl>
     ${e.pix_key ? `<div class="copy-field"><span>Chave Pix</span><code>${esc(e.pix_key)}</code><button type="button" class="btn small" data-copyval="${esc(e.pix_key)}">Copiar</button></div>` : ''}
@@ -361,6 +382,8 @@ function openEmployeeForm(emp) {
       <label class="field"><span>Data de nascimento</span><input type="date" name="birth_date" value="${e.birth_date || ''}"></label>
       <label class="field"><span>Data de admissão *</span><input type="date" name="admission_date" value="${e.admission_date}" required></label>
       <label class="field"><span>Contrato de experiência</span><select name="experience_days">${EXPERIENCE.map(([d, l]) => `<option value="${d}" ${Number(e.experience_days) === d ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${hasSettledField() ? `<label class="field full" id="settledWrap"><span>Férias já quitadas até</span><select name="vacation_periods_settled"></select>
+        <small class="muted" id="settledHint"></small></label>` : ''}
       <div class="field full pay-section"><span class="pay-title">💰 Pagamento</span></div>
       <div class="field full"><span>Tipo</span><div class="chips-select">
         <label class="chip-opt"><input type="radio" name="pay_type" value="monthly" ${e.pay_type === 'monthly' ? 'checked' : ''}><span>Mensalista (dias 15 e 30)</span></label>
@@ -398,6 +421,7 @@ function openEmployeeForm(emp) {
       area_id: fd.get('area_id') ? Number(fd.get('area_id')) : null, phone: fd.get('phone').trim(), birth_date: fd.get('birth_date') || null,
       admission_date: fd.get('admission_date'), experience_days: Number(fd.get('experience_days')), pay_type: fd.get('pay_type'),
       salary: salary / 100, first_pay_percent: Number(fd.get('first_pay_percent') || 50), pay_weekday: Number(fd.get('pay_weekday') || 5),
+      ...(hasSettledField() ? { vacation_periods_settled: Number(fd.get('vacation_periods_settled') || 0) } : {}),
       pix_key: fd.get('pix_key').trim(), bank_info: fd.get('bank_info').trim(), notes: fd.get('notes').trim(),
       status, termination_date: status === 'terminated' ? (fd.get('termination_date') || todayISO()) : null,
       attachments: [...atts, ...newAtts],
@@ -406,7 +430,13 @@ function openEmployeeForm(emp) {
       const removed = (e.attachments || []).filter((x) => !data.attachments.some((y) => y.path === x.path)).map((x) => x.path);
       await api.update('employees', `id=eq.${id}`, data);
       api.deleteFiles(removed, 'rh');
-    } else await api.insert('employees', { id, ...data });
+    } else {
+      try { await api.insert('employees', { id, ...data }); }
+      catch (err) { // banco sem o campo de férias quitadas (script supabase-rh-ferias.sql ainda não rodado)
+        if (!/vacation_periods_settled/.test(err.message)) throw err;
+        delete data.vacation_periods_settled; await api.insert('employees', { id, ...data });
+      }
+    }
     toast(isEdit ? 'Funcionário atualizado' : 'Funcionário cadastrado ✅');
     await loadAll({ quiet: true }); render();
   }, () => {
@@ -424,6 +454,26 @@ function openEmployeeForm(emp) {
     $('[name="f_doc"]', modalForm).addEventListener('change', showFiles);
     const bindRm = () => { bindAttachments($('#attBox')); $$('[data-rmatt]', modalForm).forEach((x) => x.addEventListener('click', () => { atts.splice(Number(x.dataset.rmatt), 1); $('#attBox').innerHTML = attachmentList(atts, true); bindRm(); })); };
     bindRm(); sync();
+    // Férias já quitadas até: lista os períodos completos conforme a data de admissão
+    const sel = $('[name=vacation_periods_settled]', modalForm);
+    if (sel) {
+      let chosen = isEdit ? Number(e.vacation_periods_settled || 0) : null;
+      const fill = () => {
+        const adm = $('[name=admission_date]', modalForm).value;
+        const ps = completedPeriods(adm);
+        if (chosen === null || chosen > ps.length) chosen = suggestedSettled(adm);
+        sel.innerHTML = `<option value="0">${ps.length ? 'Nenhum (todas em aberto)' : 'Ainda não completou 1 ano'}</option>` +
+          ps.map((p) => `<option value="${p.n}">Período ${p.start.slice(0, 4)}/${p.end.slice(0, 4)} (${fmtDate(p.start)} a ${fmtDate(p.end)})</option>`).join('');
+        sel.value = String(chosen);
+        const open = ps.slice(chosen);
+        $('#settledHint').innerHTML = !ps.length ? '' : open.length
+          ? `Em aberto: ${open.map((p) => `<b>${p.start.slice(0, 4)}/${p.end.slice(0, 4)}</b> (tirar até ${fmtDate(p.limit)})`).join(', ')}`
+          : 'Férias em dia ✅';
+      };
+      sel.addEventListener('change', () => { chosen = Number(sel.value); fill(); });
+      $('[name=admission_date]', modalForm).addEventListener('change', () => { if (!isEdit) chosen = null; fill(); });
+      fill();
+    }
   });
 }
 
