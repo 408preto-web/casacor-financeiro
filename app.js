@@ -295,7 +295,7 @@ function updateBadges() {
   const pb = $('.nav-item[data-view="painel"] .nav-badge'); if (pb) { pb.textContent = n; pb.hidden = !n; }
   const np = isAdmin() ? state.members.filter((m) => m.role === 'pending').length : 0;
   const eb = $('.nav-item[data-view="equipe"] .nav-badge'); if (eb) { eb.textContent = np; eb.hidden = !np; }
-  const nh = isHR() ? rhAlerts().filter((a) => a.level !== 'info').length : 0;
+  const nh = isHR() ? rhAlerts().filter((a) => a.level !== 'info').length + payrollReminders().filter((r) => r.n <= 1).length : 0;
   const hb = $('.nav-item[data-view="rh"] .nav-badge'); if (hb) { hb.textContent = nh; hb.hidden = !nh; }
   try { n + np ? navigator.setAppBadge?.(n + np) : navigator.clearAppBadge?.(); } catch { /* sem suporte */ }
 }
@@ -382,6 +382,11 @@ function renderPainel() {
     ? `<div class="alerts"><div class="alert ${late.length ? 'danger' : ''}"><span class="alert-icon">${late.length ? '🚨' : '⏰'}</span>
         <div class="alert-text">${late.length ? `<b>${late.length} conta${late.length > 1 ? 's' : ''} atrasada${late.length > 1 ? 's' : ''}</b> (${money(sumCents(late))})` : ''}
         ${late.length && now.length ? ' e ' : ''}${now.length ? `<b>${now.length} vence${now.length > 1 ? 'm' : ''} hoje</b> (${money(sumCents(now))})` : ''}</div></div></div>` : '';
+  const tomorrow = pend.filter((b) => b.due_date === addDaysISO(today, 1));
+  const tomorrowAlert = isPayer() && tomorrow.length
+    ? `<div class="alerts"><div class="alert info"><span class="alert-icon">📅</span>
+        <div class="alert-text"><b>${tomorrow.length} conta${tomorrow.length > 1 ? 's vencem' : ' vence'} amanhã</b> (${money(sumCents(tomorrow))})
+        <span class="muted">${payables(tomorrow).slice(0, 4).map((p) => esc(p.invoice ? `Fatura ${cardLabel(p.card)}` : p.supplier)).join(', ')}${tomorrow.length > 4 ? '…' : ''}</span></div></div></div>` : '';
 
   const waiting = isAdmin() ? state.members.filter((m) => m.role === 'pending') : [];
   const waitingAlert = waiting.length
@@ -394,6 +399,8 @@ function renderPainel() {
   <p class="hello">Olá, <b>${esc(state.me.name.split(' ')[0])}</b> 👋 ${state.settings.edition ? `<span class="muted">· Edição ${esc(state.settings.edition)}</span>` : ''}</p>
   ${waitingAlert}
   ${alert}
+  ${tomorrowAlert}
+  ${isHR() ? payrollBanner() : ''}
   ${isHR() ? rhAlertsBanner() : ''}
   <div class="grid cols-4">
     <div class="card stat ${late.length ? 'stat-danger' : ''}"><div class="label">Atrasadas</div><div class="value ${late.length ? 'neg' : ''}">${money(sumCents(late))}</div><div class="sub">${late.length} conta(s)</div></div>
@@ -654,6 +661,7 @@ function bindView() {
   }
   if (ui.view === 'rh') bindRH(v);
   else $$('[data-emp]', v).forEach((el) => el.addEventListener('click', () => openEmployee(el.dataset.emp)));
+  $$('[data-genfolha]', v).forEach((b) => b.addEventListener('click', () => { const [t, d] = b.dataset.genfolha.split('|'); goToPayroll(t, d); }));
   if (ui.view === 'equipe') {
     $$('[data-hr]', v).forEach((c) => c.addEventListener('change', async () => {
       try {

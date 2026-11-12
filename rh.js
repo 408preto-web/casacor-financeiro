@@ -126,6 +126,40 @@ function rhAlerts() {
   return out.sort((a, b) => order[a.level] - order[b.level] || a.date.localeCompare(b.date));
 }
 
+/** Folhas que vencem nos próximos 5 dias (ou venceram há até 5 dias) e ainda não foram geradas. */
+function payrollReminders() {
+  if (!isHR() || !state.employees?.length) return [];
+  const today = todayISO(); const ym = monthOf(today);
+  const months = [-1, 0, 1].map((i) => addMonthsISO(`${ym}-01`, i).slice(0, 7));
+  const cands = months.flatMap((m) => [['M15', payDateFor('M15', m)], ['M30', payDateFor('M30', m)]]);
+  const wds = new Set(state.employees.filter((e) => e.pay_type === 'weekly' && e.status === 'active').map((e) => Number(e.pay_weekday)));
+  for (let i = -5; i <= 5; i++) { const d = addDaysISO(today, i); if (wds.has(new Date(d + 'T12:00').getDay())) cands.push(['W', d]); }
+  return cands.map(([type, date]) => ({ type, date, n: dateDiffDays(today, date) }))
+    .filter((c) => c.n >= -5 && c.n <= 5)
+    .map((c) => { const rows = payrollRows(c.type, c.date).filter((r) => !r.done && r.total > 0); return { ...c, count: rows.length, total: rows.reduce((s, r) => s + r.total, 0) }; })
+    .filter((c) => c.count)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function payrollBanner() {
+  const rs = payrollReminders();
+  if (!rs.length) return '';
+  return `<div class="alerts">${rs.map((r) => {
+    const label = r.type === 'W' ? 'da semana (semanalistas)' : r.type === 'M15' ? 'do dia 15 (mensalistas)' : 'do dia 30 (mensalistas)';
+    const when = r.n < 0 ? `era para ${fmtDate(r.date)} (há ${-r.n} dia${r.n === -1 ? '' : 's'})` : r.n === 0 ? 'é hoje' : r.n === 1 ? `é amanhã (${fmtDate(r.date)})` : `é em ${r.n} dias (${fmtDate(r.date)})`;
+    return `<div class="alert ${r.n < 0 ? 'danger' : r.n <= 1 ? '' : 'info'}"><span class="alert-icon">💰</span>
+      <div class="alert-text"><b>Folha ${label}</b> ${when} e ainda não foi gerada <span class="muted">· ${r.count} pessoa(s) · ${money(r.total)}</span></div>
+      <button class="btn small primary" data-genfolha="${r.type}|${r.date}">Gerar agora</button></div>`;
+  }).join('')}</div>`;
+}
+
+/** Abre a Folha já no pagamento certo. */
+function goToPayroll(type, date) {
+  rhui.tab = 'folha'; rhui.pay.type = type;
+  if (type === 'W') rhui.pay.week = date; else rhui.pay.month = date.slice(0, 7);
+  setView('rh');
+}
+
 function rhAlertsBanner() {
   const al = rhAlerts().filter((a) => a.level !== 'info' || /Aniversário hoje/.test(a.text));
   if (!al.length) return '';
