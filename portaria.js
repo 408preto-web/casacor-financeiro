@@ -71,7 +71,7 @@ function renderPortaria() {
 
 function entryRow(x, big = false) {
   const p = gPerson(x.person_id) || { name: '—' };
-  return `<li class="g-row ${x.exited_at ? 'out' : 'in'}" ${!x.exited_at ? `data-gexit="${x.id}"` : ''}>
+  return `<li class="g-row ${x.exited_at ? 'out' : 'in'}" data-gentry="${x.id}">
     <div class="g-time">${fmtTime(x.entered_at)}</div>
     <div class="g-main"><div class="g-name">${esc(p.name)} ${p.is_team ? '<span class="badge open">Equipe</span>' : ''}</div>
       <div class="g-meta">${esc(envLabel(gEnv(x.env_id)))} · ${esc(x.service || '—')}${p.company ? ' · ' + esc(p.company) : ''}</div></div>
@@ -124,7 +124,15 @@ function stepSearch(q) {
         }).join('')}</ul>` : '<p class="muted g-hint">Ninguém encontrado. Toque em <b>PESSOA NOVA</b>.</p>';
       $$('[data-gpick]', box).forEach((b) => b.addEventListener('click', () => pickPerson(gPerson(b.dataset.gpick))));
     };
-    input.addEventListener('input', show); show();
+    input.addEventListener('input', () => {
+      show();
+      const d = onlyDigits(input.value);
+      if (d.length !== 11) return;
+      const found = (state.gatePeople || []).filter((p) => onlyDigits(p.cpf) === d);
+      if (found.length === 1) setTimeout(() => { if (onlyDigits($('#gq')?.value) === d) pickPerson(found[0]); }, 250);
+      else if (!found.length) box.innerHTML = `<p class="muted g-hint">CPF <b>${fmtCpfG(d)}</b> ainda não cadastrado.${cpfValid(d) ? ' Toque em <b>PESSOA NOVA</b>.' : ' <b>Confira os números</b> — esse CPF parece errado.'}</p>`;
+    });
+    show();
     $('#gNew').addEventListener('click', () => stepNewPerson(input.value));
     setTimeout(() => input.focus(), 80);
   });
@@ -150,7 +158,7 @@ function stepNewPerson(q) {
     const [p] = await api.insert('gate_people', { name: name.toUpperCase() === name ? titleCaseG(name) : name, cpf, company: fd.get('company').trim() });
     state.gatePeople.push(p);
     setTimeout(() => stepEnv(p, {}), 0);
-  }, () => setTimeout(() => $('[name=name]', modalForm).value ? $('[name=cpf]', modalForm).focus() : $('[name=name]', modalForm).focus(), 80));
+  }, () => setTimeout(() => { const n = $('[name=name]', modalForm), c = $('[name=cpf]', modalForm); if (n && c) (n.value ? c : n).focus(); }, 80));
 }
 const titleCaseG = (s) => s.toLowerCase().replace(/(^|\s)(\S)/g, (m, a, b) => a + b.toUpperCase()).replace(/\s(D[aeo]s?|E)\s/g, (m) => m.toLowerCase());
 
@@ -172,15 +180,17 @@ function pickPerson(p) {
     return;
   }
   const env = gEnv(p.last_env_id);
-  if (env && env.active && p.last_service) stepConfirm(p, { env, service: p.last_service });
-  else stepEnv(p, { service: p.last_service || (p.is_team ? 'Equipe Casa Cor' : '') });
+  if (p.is_team && env && env.active && p.last_service) return stepConfirm(p, { env, service: p.last_service }); // equipe: sempre igual
+  stepEnv(p, { lastEnvId: p.last_env_id, lastService: p.last_service || (p.is_team ? 'Equipe Casa Cor' : '') });
 }
 
 function stepEnv(p, sel) {
   const envs = envsSorted();
   openModal(`
-    <div class="g-modal"><h2>🏠 Para qual ambiente?</h2><p class="g-who">${esc(p.name)}</p>
+    <div class="g-modal"><h2>🏠 Para qual ambiente?</h2><p class="g-who">${esc(p.name)}${p.company ? ' · ' + esc(p.company) : ''}</p>
+      ${sel.lastEnvId && !sel.env ? '<p class="muted g-hint">Já veio antes. O ambiente da última vez está marcado com ⭐.</p>' : ''}
       <div class="g-tiles">${envs.map((e) => `<button type="button" class="g-tile ${sel.env && sel.env.id === e.id ? 'sel' : ''}" data-genv="${e.id}">
+        ${!sel.env && String(sel.lastEnvId) === String(e.id) ? '<i class="g-last">⭐ última vez</i>' : ''}
         ${e.number ? `<b class="g-num">${esc(e.number)}</b>` : ''}<span>${esc(e.name)}</span>${e.architect ? `<small>${esc(e.architect)}</small>` : ''}</button>`).join('')}</div>
       <div class="modal-actions"><button class="btn big" value="cancel" formnovalidate>Cancelar</button></div></div>`, () => false, () => {
     $$('[data-genv]', modalForm).forEach((b) => b.addEventListener('click', () => {
@@ -193,8 +203,8 @@ function stepEnv(p, sel) {
 function stepService(p, sel) {
   openModal(`
     <div class="g-modal"><h2>🔨 Qual trabalho?</h2><p class="g-who">${esc(p.name)} · ${esc(envLabel(sel.env))}</p>
-      <div class="g-tiles svc">${SERVICES.map(([s, i]) => `<button type="button" class="g-tile ${sel.service === s ? 'sel' : ''}" data-gsvc="${s}"><span class="g-ico">${i}</span><span>${s}</span></button>`).join('')}</div>
-      <label class="field"><span>Outro trabalho (escreva)</span><input id="gOther" class="g-input" autocapitalize="sentences"></label>
+      <div class="g-tiles svc">${SERVICES.map(([s, i]) => `<button type="button" class="g-tile ${sel.service === s ? 'sel' : ''}" data-gsvc="${s}">${!sel.service && sel.lastService === s ? '<i class="g-last">⭐ última vez</i>' : ''}<span class="g-ico">${i}</span><span>${s}</span></button>`).join('')}</div>
+      <label class="field"><span>Outro trabalho (escreva)</span><input id="gOther" class="g-input" autocapitalize="sentences" value="${!sel.service && sel.lastService && !SERVICES.some(([s]) => s === sel.lastService) ? esc(sel.lastService) : ''}"></label>
       <div class="modal-actions"><button class="btn big" value="cancel" formnovalidate>Cancelar</button><button class="btn big primary" type="button" id="gOtherOk">Continuar ➡️</button></div></div>`, () => false, () => {
     $$('[data-gsvc]', modalForm).forEach((b) => b.addEventListener('click', () => stepConfirm(p, { ...sel, service: b.dataset.gsvc })));
     $('#gOtherOk').addEventListener('click', () => { const v = $('#gOther').value.trim(); if (!v) { toast('Escolha ou escreva o trabalho'); return; } stepConfirm(p, { ...sel, service: v }); });
@@ -203,16 +213,22 @@ function stepService(p, sel) {
 
 function stepConfirm(p, sel) {
   openModal(`
-    <div class="g-modal"><h2>Confirmar entrada</h2>
+    <div class="g-modal"><h2>${sel.editId ? '✏️ Corrigir entrada' : 'Confirmar entrada'}</h2>
       <div class="g-summary">
         <div class="g-sum-name">${esc(p.name)}</div>
         <div>${fmtCpfG(p.cpf)}${p.company ? ' · ' + esc(p.company) : ''}${p.is_team ? ' · Equipe Casa Cor' : ''}</div>
         <div class="g-sum-line"><span>🏠 ${esc(envLabel(sel.env))}</span><button type="button" class="btn small" id="gChEnv">Mudar</button></div>
         <div class="g-sum-line"><span>🔨 ${esc(sel.service)}</span><button type="button" class="btn small" id="gChSvc">Mudar</button></div>
       </div>
-      <button class="gbtn-wide go" value="save">✅ CONFIRMAR ENTRADA</button>
+      <button class="gbtn-wide go" value="save">${sel.editId ? '💾 SALVAR CORREÇÃO' : '✅ CONFIRMAR ENTRADA'}</button>
       <div class="modal-actions"><button class="btn big" value="cancel" formnovalidate>Cancelar</button></div></div>`,
   async () => {
+    if (sel.editId) {
+      await api.update('gate_entries', `id=eq.${sel.editId}`, { env_id: sel.env?.id ?? null, service: sel.service });
+      const x = state.gateEntries.find((y) => y.id === sel.editId); if (x) Object.assign(x, { env_id: sel.env?.id ?? null, service: sel.service });
+      api.update('gate_people', `id=eq.${p.id}`, { last_env_id: sel.env?.id ?? null, last_service: sel.service }).then(() => { p.last_env_id = sel.env?.id; p.last_service = sel.service; }).catch(() => {});
+      toast('Entrada corrigida ✅'); render(); return;
+    }
     const [row] = await api.insert('gate_entries', { person_id: p.id, env_id: sel.env?.id ?? null, service: sel.service });
     state.gateEntries.unshift(row);
     api.update('gate_people', `id=eq.${p.id}`, { last_env_id: sel.env?.id ?? null, last_service: sel.service }).then(() => { p.last_env_id = sel.env?.id; p.last_service = sel.service; }).catch(() => {});
@@ -229,6 +245,41 @@ function showDone(title, sub) {
   render();
   const t = setTimeout(() => { if (modal.open && $('.g-done', modalForm)) modal.close(); }, 3000);
   modal.addEventListener('close', () => clearTimeout(t), { once: true });
+}
+
+/* ---------- Corrigir uma entrada já lançada ---------- */
+function openEntryMenu(x) {
+  const p = x && gPerson(x.person_id); if (!p) return;
+  openModal(`<div class="g-modal"><h2>${esc(p.name)}</h2>
+    <p class="g-big-text">Entrou às <b>${fmtTime(x.entered_at)}</b>${x.exited_at ? ` · saiu às <b>${fmtTime(x.exited_at)}</b>` : ''}<br>🏠 ${esc(envLabel(gEnv(x.env_id)))}<br>🔨 ${esc(x.service || '—')}</p>
+    <button type="button" class="gbtn-wide fix" id="gFixEntry">✏️ Corrigir ambiente ou trabalho</button>
+    <button type="button" class="gbtn-wide fix" id="gFixPerson">✏️ Corrigir nome, CPF ou empresa</button>
+    ${x.exited_at ? '' : '<button class="gbtn-wide out" value="exit">⬅️ Registrar SAÍDA</button>'}
+    <div class="modal-actions"><button class="btn big" value="cancel" formnovalidate>Voltar</button></div></div>`,
+  async (action) => { if (action === 'exit') await registerExit([x]); }, () => {
+    $('#gFixEntry').addEventListener('click', () => stepConfirm(p, { env: gEnv(x.env_id), service: x.service || '', editId: x.id }));
+    $('#gFixPerson').addEventListener('click', () => openPersonFix(p));
+  });
+}
+
+function openPersonFix(p) {
+  openModal(`<div class="g-modal"><h2>✏️ Corrigir dados</h2>
+    <label class="field"><span>Nome completo</span><input name="name" class="g-input" value="${esc(p.name)}" autocapitalize="words" required></label>
+    <label class="field"><span>CPF</span><input name="cpf" class="g-input" inputmode="numeric" value="${esc(onlyDigits(p.cpf) ? fmtCpfG(p.cpf) : '')}"></label>
+    <label class="field"><span>Empresa (de quem trabalha)</span><input name="company" class="g-input" value="${esc(p.company)}" autocapitalize="words"></label>
+    <p id="gErr" class="g-err"></p>
+    <div class="modal-actions"><button class="btn big" value="cancel" formnovalidate>Cancelar</button><button class="btn primary big" value="save">💾 Salvar</button></div></div>`,
+  async (action, fd) => {
+    const name = fd.get('name').trim().replace(/\s+/g, ' '); const cpf = onlyDigits(fd.get('cpf'));
+    const err = (m) => { $('#gErr').textContent = m; return false; };
+    if (name.split(' ').length < 2) return err('Escreva o nome e o sobrenome.');
+    if (cpf && !cpfValid(cpf)) return err('CPF inválido. Confira os números com o documento.');
+    const other = cpf && state.gatePeople.find((o) => o.id !== p.id && onlyDigits(o.cpf) === cpf);
+    if (other) return err(`Esse CPF já é de ${other.name}. Fale com a administração.`);
+    const patch = { name: name.toUpperCase() === name ? titleCaseG(name) : name, cpf, company: fd.get('company').trim() };
+    await api.update('gate_people', `id=eq.${p.id}`, patch); Object.assign(p, patch);
+    toast('Dados corrigidos ✅'); render();
+  });
 }
 
 /* ---------- Fluxo de SAÍDA ---------- */
@@ -412,12 +463,7 @@ function bindPortaria(v) {
   $('#gIn', v)?.addEventListener('click', openEntryFlow);
   $('#gOut', v)?.addEventListener('click', openExitFlow);
   $('#gLogout', v)?.addEventListener('click', () => { if (confirm('Sair do sistema neste aparelho?')) { api.signOut(); localStorage.removeItem(CACHE_KEY); location.reload(); } });
-  $$('[data-gexit]', v).forEach((el) => el.addEventListener('click', () => {
-    const x = state.gateEntries.find((y) => y.id === el.dataset.gexit); const p = gPerson(x.person_id);
-    openModal(`<div class="g-modal"><h2>${esc(p?.name || '')}</h2><p class="g-big-text">Entrou às <b>${fmtTime(x.entered_at)}</b><br>${esc(envLabel(gEnv(x.env_id)))} · ${esc(x.service)}</p>
-      <div class="modal-actions"><button class="btn big" value="cancel" formnovalidate>Voltar</button><button class="btn big primary" value="exit">⬅️ Registrar SAÍDA</button></div></div>`,
-    async (action) => { if (action === 'exit') await registerExit([x]); });
-  }));
+  $$('[data-gentry]', v).forEach((el) => el.addEventListener('click', () => openEntryMenu(state.gateEntries.find((y) => String(y.id) === el.dataset.gentry))));
   $('#gDate', v)?.addEventListener('change', (e) => { gui.date = e.target.value || todayISO(); gui.report = null; render(); });
   $('#gEnvF', v)?.addEventListener('change', (e) => { gui.env = e.target.value; render(); });
   const q = $('#gQ', v); q?.addEventListener('input', () => { gui.q = q.value; const pos = q.selectionStart; render(); const n = $('#gQ'); n.focus(); n.setSelectionRange(pos, pos); });
