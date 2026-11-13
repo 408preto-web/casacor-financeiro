@@ -571,3 +571,21 @@ button.chip { cursor: pointer; }
 .g-last { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: 11px; font-weight: 700; color: #a16207; background: #fef3c7; border-radius: 8px; padding: 1px 6px; }
 .gbtn-wide.fix { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); margin-bottom: 8px; font-size: 17px; }
 .gbtn-wide.out { background: #c2410c; color: #fff; margin-bottom: 8px; }
+
+/* Anexar comprovante */
+.rc-cta { display: flex; align-items: center; gap: 14px; width: 100%; margin: 4px 0 14px; padding: 14px 16px; border: 2px dashed color-mix(in srgb, var(--primary) 45%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--primary) 6%, var(--surface)); color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.rc-cta b { display: block; font-size: 17px; color: var(--primary); }
+.rc-cta small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.rc-cta-ico { font-size: 30px; }
+.rc-pick { display: flex; align-items: center; justify-content: center; width: 100%; margin: 8px 0; cursor: pointer; }
+.rc-loading { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin: 14px 0 8px; }
+.rc-bar { height: 100%; background: var(--primary); transition: width .3s; }
+.rc-found { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); margin-bottom: 10px; font-size: 15px; }
+.rc-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; max-height: 52vh; overflow: auto; }
+.rc-cand { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.rc-cand.best { border: 2px solid #15803d; background: color-mix(in srgb, #15803d 7%, var(--surface)); }
+.rc-main { display: grid; gap: 2px; min-width: 0; }
+.rc-main span { font-size: 13px; }
+.rc-why { color: #15803d; font-weight: 600; }
+.rc-amt { font-weight: 700; white-space: nowrap; }
+.rc-attached { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; word-break: break-all; }

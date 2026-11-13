@@ -79,3 +79,4 @@ O porteiro cria o acesso no celular/tablet e o administrador o aprova como **Por
 | `rh.js`, `supabase-rh.sql` | Módulo de RH (funcionários, ocorrências, folha, avisos) |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalação como app |
 | `portaria.js`, `supabase-portaria.sql` | Portaria da obra (entradas, saídas, ambientes, relatório) |
+| `comprovante.js` | Anexar comprovante: lê o arquivo (PDF ou foto) e sugere a conta; no Android aparece no menu Compartilhar |

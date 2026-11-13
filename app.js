@@ -291,6 +291,7 @@ function startApp() {
     setInterval(() => { if (document.visibilityState === 'visible' && !modal.open) loadAll({ quiet: true }); }, 60000);
   }
   setView(ui.view);
+  takeSharedFiles(); // comprovante compartilhado pelo menu do Android
 }
 
 async function boot() {
@@ -450,8 +451,10 @@ function renderPainel() {
         ${waiting.length > 1 ? `<span class="muted">(${waiting.map((m) => esc(m.name)).join(', ')})</span>` : `<span class="muted">(${esc(waiting[0].email)})</span>`}</div>
         <button class="btn small primary" data-go="equipe">Ver e aprovar</button></div></div>` : '';
 
+  const rcCount = isPayer() ? state.bills.filter((b) => b.status === 'paid' && !(b.attachments || []).some((a) => a.kind === 'comprovante')).length : 0;
   return `
   <p class="hello">Olá, <b>${esc(state.me.name.split(' ')[0])}</b> 👋 ${state.settings.edition ? `<span class="muted">· Edição ${esc(state.settings.edition)}</span>` : ''}</p>
+  ${isPayer() ? `<button class="rc-cta" id="rcOpen"><span class="rc-cta-ico">📎</span><span><b>Anexar comprovante</b><small>Escolha o arquivo e o sistema acha a conta${rcCount ? ` · ${rcCount} paga${rcCount > 1 ? 's' : ''} sem comprovante` : ''}</small></span></button>` : ''}
   ${waitingAlert}
   ${alert}
   ${tomorrowAlert}
@@ -702,6 +705,7 @@ function bindView() {
   $$('[data-bill]', v).forEach((el) => el.addEventListener('click', () => openBill(el.dataset.bill)));
   $$('[data-invoice]', v).forEach((el) => el.addEventListener('click', () => openInvoice(el.dataset.invoice)));
   $$('[data-go]', v).forEach((el) => el.addEventListener('click', () => setView(el.dataset.go)));
+  $('#rcOpen', v)?.addEventListener('click', () => openReceiptFlow());
   $$('[data-copy]', v).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); copyText($('#' + b.dataset.copy).textContent); }));
 
   if (ui.view === 'contas') {
@@ -1041,7 +1045,7 @@ function openBill(id) {
 }
 
 /* ---------- Pagar ---------- */
-function openPay(bills, title) {
+function openPay(bills, title, preset = {}) {
   const total = sumCents(bills);
   const payers = state.members.filter((m) => ['payer', 'admin'].includes(m.role));
   const one = bills.length === 1 ? bills[0] : null;
@@ -1049,17 +1053,18 @@ function openPay(bills, title) {
     <h2>✅ ${title || 'Marcar como pago'}</h2>
     <p class="muted" style="margin-top:-6px">${one ? `<b>${esc(one.supplier)}</b> · vencimento ${fmtDate(one.due_date)}` : `${bills.length} compras`}</p>
     <div class="form-grid">
-      <label class="field"><span>Valor pago (R$)</span><input class="amount-input" name="amount" inputmode="decimal" value="${centsToInput(total)}" ${one ? '' : 'readonly'} required></label>
-      <label class="field"><span>Data do pagamento</span><input type="date" name="paid_at" value="${todayISO()}" required></label>
+      <label class="field"><span>Valor pago (R$)</span><input class="amount-input" name="amount" inputmode="decimal" value="${centsToInput(one && preset.amountCents ? preset.amountCents : total)}" ${one ? '' : 'readonly'} required></label>
+      <label class="field"><span>Data do pagamento</span><input type="date" name="paid_at" value="${preset.paidAt || todayISO()}" required></label>
       <label class="field"><span>Pago por</span><select name="paid_by">${payers.map((p) => `<option value="${p.user_id}" ${p.user_id === state.me.user_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
-      <label class="field"><span>Comprovante (foto ou PDF)</span><input type="file" name="receipt" accept="image/*,application/pdf" multiple></label>
+      ${preset.files ? `<div class="field"><span>Comprovante</span><div class="rc-attached">📎 ${preset.files.map((f) => esc(f.name)).join(', ')}</div></div>`
+        : '<label class="field"><span>Comprovante (foto ou PDF)</span><input type="file" name="receipt" accept="image/*,application/pdf" multiple></label>'}
       <label class="field full"><span>Observação do pagamento</span><input name="payment_notes" placeholder="Ex.: pago com desconto, juros…"></label>
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Confirmar pagamento</button></div>`,
   async (action, fd) => {
     const paidCents = one ? parseMoney(fd.get('amount')) : null;
     if (one && paidCents <= 0) { toast('Informe o valor pago'); return false; }
-    const files = $('[name="receipt"]', modalForm).files;
+    const files = preset.files || $('[name="receipt"]', modalForm).files;
     const receipts = files.length ? await uploadFiles(files, `pagamentos/${uuid()}`, 'comprovante') : [];
     for (const b of bills) {
       const rows = await api.update('bills', `id=eq.${b.id}`, {
