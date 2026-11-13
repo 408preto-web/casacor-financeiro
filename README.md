@@ -5,7 +5,7 @@ e o financeiro ver o que vence e marcar como pago.
 
 ## Como funciona
 
-- **Quem compra lança a conta:** fornecedor, o que foi comprado, área, valor, data da compra, **data para pagar**,
+- **Quem compra lança a conta:** fornecedor, descrição (o que está pagando), área, valor, data da compra, **data para pagar**,
   forma de pagamento (Pix com chave, boleto com código, cartão da empresa, transferência, dinheiro), parcelas e
   **anexos** (foto/PDF da nota fiscal e do boleto). “Quem comprou” é registrado automaticamente.
 - **Quem paga** (pagador/administrador) vê no **Painel**: atrasadas, vencem hoje, próximos 7 dias, depois —

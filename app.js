@@ -845,7 +845,7 @@ function openBillForm(bill, defaults = {}) {
     <div class="form-grid">
       <label class="field full"><span>Fornecedor *</span><input name="supplier" list="suppliers" value="${esc(b.supplier)}" required placeholder="Quem vai receber o pagamento" autocomplete="off">
         <datalist id="suppliers">${suppliers.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></label>
-      <label class="field full"><span>O que foi comprado</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: Tinta para o ambiente 3, buffet da abertura…"></label>
+      <label class="field full"><span>Descrição (o que está pagando)</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: Salário de março, tinta do ambiente 3, buffet da abertura…"></label>
       <label class="field"><span>Valor (R$) *</span><input class="amount-input" name="amount" inputmode="decimal" placeholder="0,00" value="${b.cents ? centsToInput(b.cents) : ''}" required autocomplete="off"></label>
       <label class="field"><span>Área *</span><select name="area_id" required><option value="">Escolha…</option>${state.areas.filter((a) => a.active || String(a.id) === String(b.area_id)).map((a) => `<option value="${a.id}" ${String(a.id) === String(b.area_id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
       <label class="field"><span>Data da compra</span><input type="date" name="purchase_date" value="${b.purchase_date}" required></label>
