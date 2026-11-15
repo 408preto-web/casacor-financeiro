@@ -79,7 +79,7 @@ function rhRelatorio() {
     <label class="field"><span>Mês</span><input type="month" id="frMonth" value="${d.month}"></label>
     <label class="field"><span>Funcionários</span><select id="frType">
       <option value="all" ${rrep.type === 'all' ? 'selected' : ''}>Todos</option><option value="monthly" ${rrep.type === 'monthly' ? 'selected' : ''}>Mensalistas</option><option value="weekly" ${rrep.type === 'weekly' ? 'selected' : ''}>Semanalistas (obra)</option></select></label>
-    <div class="row-actions fr-actions"><button class="btn primary" id="frPrint" ${d.pays.length ? '' : 'disabled'}>🖨️ Imprimir / PDF</button><button class="btn" id="frCsv" ${d.pays.length ? '' : 'disabled'}>📊 Excel</button></div>
+    <div class="row-actions fr-actions"><button class="btn wa-btn fr-wa" id="frShare" ${d.pays.length ? '' : 'disabled'}>📲 Enviar pelo WhatsApp</button><button class="btn" id="frPrint" ${d.pays.length ? '' : 'disabled'}>🖨️ Imprimir</button><button class="btn" id="frCsv" ${d.pays.length ? '' : 'disabled'}>📊 Excel</button></div>
   </div>
   ${d.missing.length ? `<div class="alerts mt"><div class="alert info"><span class="alert-icon">ℹ️</span><div class="alert-text"><b>Ainda não gerado neste mês:</b> <span class="muted">${esc(d.missing.join(', '))}</span></div><button class="btn small" data-rhtab="folha">Ir para a Folha</button></div></div>` : ''}
   <div class="grid cols-4 mt">
@@ -160,7 +160,105 @@ function exportFolhaCsv() {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+/* ---------- PDF em arquivo (para compartilhar no WhatsApp) ---------- */
+const JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+const JSPDF_TABLE = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+let pdfLibsReady = null;
+const loadPdfLibs = () => (pdfLibsReady ||= loadScriptOnce(JSPDF).then(() => loadScriptOnce(JSPDF_TABLE)).catch((e) => { pdfLibsReady = null; throw e; }));
+
+function folhaPdfFile(d) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth(); const M = 12; const BR = [154, 52, 18];
+  const m = (c) => money(c).replace(/ /g, ' ');
+  const neg = (c) => (c ? '-' + m(c) : '—');
+  const t = d.tot;
+  const typeLbl = { all: 'Mensalistas e semanalistas', monthly: 'Mensalistas', weekly: 'Semanalistas (obra)' }[rrep.type];
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(`Folha de pagamento — ${monthName(d.month)}`, M, 16);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(80);
+  doc.text(`Casa Cor Ceará${state.settings.edition ? ' · Edição ' + state.settings.edition : ''} · ${typeLbl}`, M, 22);
+  doc.text(`Emitido em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} por ${state.me.name}`, W - M, 22, { align: 'right' });
+  doc.setDrawColor(...BR); doc.setLineWidth(0.8); doc.line(M, 25, W - M, 25);
+  const boxes = [['Total da folha', m(t.total)], ['Salários', m(t.base)], ['Extras / bônus', m(t.plus)], ['VA + VT', m(t.va + t.vt)], ['Descontos', neg(t.minus)], ['Pago', m(t.paid)], ['A pagar', m(t.total - t.paid)]];
+  const bw = (W - 2 * M - 6 * 3) / 7;
+  boxes.forEach(([l, v], i) => {
+    const x = M + i * (bw + 3);
+    doc.setDrawColor(210); doc.setLineWidth(0.2); doc.roundedRect(x, 29, bw, 14, 1.5, 1.5);
+    doc.setTextColor(100); doc.setFontSize(7.5); doc.text(l, x + 2.5, 33.5);
+    doc.setTextColor(20); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(v, x + 2.5, 40); doc.setFont('helvetica', 'normal');
+  });
+  const base = { theme: 'plain', margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 1.6, textColor: 20, lineColor: 225, lineWidth: { bottom: 0.2 } },
+    headStyles: { fillColor: [243, 240, 238], fontStyle: 'bold', fontSize: 7.5 }, footStyles: { fillColor: [250, 248, 246], fontStyle: 'bold' } };
+  const title = (txt, y) => { doc.setTextColor(...BR); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(txt, M, y); doc.setDrawColor(...BR); doc.setLineWidth(0.5); doc.line(M, y + 1.5, W - M, y + 1.5); doc.setFont('helvetica', 'normal'); return y + 4; };
+  const num = { halign: 'right' };
+  doc.autoTable({ ...base, startY: title(`Resumo por funcionário (${d.rows.length})`, 52),
+    head: [['Funcionário', 'Cargo', 'Área', 'Tipo', 'Salário', 'Extras', 'VA', 'VT', 'Descontos', 'Total', 'Situação']],
+    body: d.rows.map((r) => [r.e.name, r.e.job_title || '', areaById(r.e.area_id).name, r.e.pay_type === 'weekly' ? 'Semanal' : 'Mensal', m(r.base), r.plus ? m(r.plus) : '—', r.va ? m(r.va) : '—', r.vt ? m(r.vt) : '—', neg(r.minus), m(r.total), r.paid >= r.total ? 'Pago' : r.paid ? 'Parcial' : 'A pagar']),
+    foot: [['Total', '', '', '', m(t.base), m(t.plus), m(t.va), m(t.vt), neg(t.minus), m(t.total), '']],
+    columnStyles: { 4: num, 5: num, 6: num, 7: num, 8: num, 9: { ...num, fontStyle: 'bold' } },
+    didParseCell: (c) => { if (c.section !== 'body' && c.column.index >= 4 && c.column.index <= 9) c.cell.styles.halign = 'right'; } });
+  let y = doc.lastAutoTable.finalY + 8;
+  if (d.areas.length > 1) {
+    doc.autoTable({ ...base, startY: title('Por área', y), tableWidth: 150, body: d.areas.map(([a, x]) => [a, `${x.n} funcionário(s)`, m(x.total)]), columnStyles: { 2: num } });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+  doc.autoTable({ ...base, startY: title(`Detalhamento dos pagamentos (${d.pays.length})`, y),
+    head: [['Data', 'Funcionário', 'Pagamento', 'Composição', 'Valor', 'Situação']],
+    body: d.pays.map((p) => [fmtDate(p.b.due_date), p.e.name, PAY_TYPE_LABEL[p.type] || '',
+      `Salário ${m(p.base)}${p.va ? ` · VA ${p.days ? p.days + 'd ' : ''}${m(p.va)}` : ''}${p.vt ? ` · VT ${p.days ? p.days + 'd ' : ''}${m(p.vt)}` : ''}${p.items.length ? '\n' + p.items.join(' · ').replace(/−/g, '-').replace(/ /g, ' ') : ''}`,
+      m(p.b.cents), p.b.status === 'paid' ? `Pago ${fmtDate(p.b.paid_at)}` : 'A pagar']),
+    columnStyles: { 0: { cellWidth: 20 }, 3: { cellWidth: 120 }, 4: num }, didParseCell: (c) => { if (c.section === 'head' && c.column.index === 4) c.cell.styles.halign = 'right'; } });
+  y = doc.lastAutoTable.finalY + 8;
+  doc.setTextColor(60); doc.setFontSize(8.5);
+  if (d.missing.length) { const lines = doc.splitTextToSize(`Ainda não gerado no sistema: ${d.missing.join(', ')}.`, W - 2 * M); doc.text(lines, M, y); y += lines.length * 4 + 4; }
+  y += 12;
+  if (y + 6 > doc.internal.pageSize.getHeight() - 10) { doc.addPage(); y = 30; }
+  [[W / 4, 'Elaborado por', state.me.name], [(3 * W) / 4, 'Aprovado por', 'Diretoria financeira']].forEach(([x, a, b]) => {
+    doc.setDrawColor(120); doc.setLineWidth(0.3); doc.line(x - 35, y, x + 35, y);
+    doc.text(a, x, y - 12, { align: 'center' }); doc.text(b, x, y + 4.5, { align: 'center' });
+  });
+  const pages = doc.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(140); doc.text(`Página ${i} de ${pages}`, W - M, doc.internal.pageSize.getHeight() - 6, { align: 'right' }); }
+  const name = `Folha ${monthName(d.month)} - Casa Cor Ceara.pdf`.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return new File([doc.output('blob')], name, { type: 'application/pdf' });
+}
+
+const folhaShareText = (d) => `Folha de pagamento — ${monthName(d.month)}\nTotal: ${money(d.tot.total)} · ${d.rows.length} funcionário(s)\nPago: ${money(d.tot.paid)} · A pagar: ${money(d.tot.total - d.tot.paid)}`;
+
+async function shareFolha() {
+  const d = folhaReportData(); if (!d.pays.length) return;
+  const btn = $('#frShare'); const label = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando PDF…'; }
+  let file;
+  try { await loadPdfLibs(); file = folhaPdfFile(d); }
+  catch (e) { toast(e.message || 'Não foi possível gerar o PDF'); return; }
+  finally { if (btn && document.contains(btn)) { btn.disabled = false; btn.textContent = label; } }
+  try { await sendFolhaFile(file, d); }
+  catch (e) {
+    if (e?.name === 'AbortError') return; // fechou o menu
+    // o celular pediu um novo toque: mostra o botão de enviar com o PDF já pronto
+    openModal(`<h2>📄 PDF pronto</h2><p class="muted">${esc(file.name)}</p>
+      <button type="button" class="btn wa-btn big" id="frSendNow">📲 Enviar pelo WhatsApp</button>
+      <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Fechar</button></div>`, () => {},
+    () => $('#frSendNow').addEventListener('click', async () => { try { await sendFolhaFile(file, d); modal.close(); } catch (er) { if (er?.name !== 'AbortError') toast(er.message); } }));
+  }
+}
+
+async function sendFolhaFile(file, d) {
+  if (navigator.canShare?.({ files: [file] })) {
+    await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/, ''), text: folhaShareText(d) });
+    return;
+  }
+  // Computador / navegador sem compartilhar arquivos: baixa o PDF e abre o WhatsApp com o resumo
+  const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  window.open(`https://wa.me/?text=${encodeURIComponent(folhaShareText(d) + '\n\n(PDF da folha em anexo)')}`, '_blank', 'noopener');
+  toast('PDF baixado — anexe na conversa do WhatsApp');
+}
+
 function bindFolhaReport(v) {
+  if ($('#frShare', v)) loadPdfLibs().catch(() => {}); // já deixa pronto para o compartilhar ser imediato
+  $('#frShare', v)?.addEventListener('click', shareFolha);
   $('#frMonth', v)?.addEventListener('change', (e) => { rrep.month = e.target.value; render(); });
   $('#frType', v)?.addEventListener('change', (e) => { rrep.type = e.target.value; render(); });
   $('#frPrint', v)?.addEventListener('click', printFolha);
