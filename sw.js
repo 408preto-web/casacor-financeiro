@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do app para abrir rápido e funcionar com internet instável.
-const CACHE = 'casacor-pagamentos-v13';
-const ASSETS = ['./', 'index.html', 'styles.css', 'config.js', 'api.js', 'rh.js', 'portaria.js', 'comprovante.js', 'app.js', 'manifest.webmanifest',
+const CACHE = 'casacor-pagamentos-v14';
+const ASSETS = ['./', 'index.html', 'styles.css', 'config.js', 'api.js', 'rh.js', 'rh-relatorio.js', 'portaria.js', 'comprovante.js', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

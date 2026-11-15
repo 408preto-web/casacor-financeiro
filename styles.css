@@ -589,3 +589,41 @@ button.chip { cursor: pointer; }
 .rc-why { color: #15803d; font-weight: 600; }
 .rc-amt { font-weight: 700; white-space: nowrap; }
 .rc-attached { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 14px; word-break: break-all; }
+
+/* RH — relatório da folha */
+.fr-actions { margin-left: auto; align-self: flex-end; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fr-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+.fr-table th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.fr-table td { padding: 10px 6px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; vertical-align: top; }
+.fr-table .num { text-align: right; white-space: nowrap; }
+.fr-table tbody tr { cursor: pointer; }
+.fr-table tbody tr:hover { background: var(--surface-2); }
+.fr-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: 0; }
+#printArea { display: none; }
+@media print {
+  body.printing > *:not(#printArea) { display: none !important; }
+  body.printing #printArea { display: block; }
+  body.printing { background: #fff; }
+  @page { size: A4 landscape; margin: 12mm; }
+}
+.pr { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #111; font-size: 10.5px; }
+.pr h1 { font-size: 18px; margin: 0 0 2px; }
+.pr h2 { font-size: 13px; margin: 16px 0 6px; border-bottom: 2px solid #9a3412; padding-bottom: 3px; color: #9a3412; }
+.pr p { margin: 0; color: #444; }
+.pr-head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #9a3412; padding-bottom: 8px; }
+.pr-meta { text-align: right; color: #555; }
+.pr-sum { width: 100%; border-collapse: separate; border-spacing: 6px; margin: 8px -6px 0; }
+.pr-sum td { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; }
+.pr-sum span { display: block; color: #666; font-size: 9.5px; }
+.pr-sum b { font-size: 13px; }
+.pr-t { width: 100%; border-collapse: collapse; }
+.pr-t th { text-align: left; background: #f3f0ee; padding: 5px; font-size: 9.5px; border-bottom: 1px solid #ccc; }
+.pr-t td { padding: 4px 5px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+.pr-t .n { text-align: right; white-space: nowrap; }
+.pr-t tfoot td { font-weight: 700; border-top: 2px solid #999; background: #faf8f6; }
+.pr-t tr { page-break-inside: avoid; }
+.pr-small { width: 60%; }
+.pr-comp { color: #333; }
+.pr-note { margin-top: 10px !important; font-style: italic; }
+.pr-sign { display: flex; justify-content: space-around; margin-top: 36px; text-align: center; color: #333; page-break-inside: avoid; }

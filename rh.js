@@ -219,8 +219,8 @@ function renderRH() {
     return `<div class="card"><div class="empty"><div style="font-size:44px">🧑‍💼</div>
       <p>O módulo de RH ainda não foi ativado no banco de dados.<br>Rode o script <b>supabase-rh.sql</b> no SQL Editor do Supabase.</p></div></div>`;
   }
-  const tabs = [['func', '👷 Funcionários'], ['ocor', '📝 Ocorrências'], ['folha', '💰 Folha']];
-  const body = { func: rhFuncionarios, ocor: rhOcorrencias, folha: rhFolha }[rhui.tab]();
+  const tabs = [['func', '👷 Funcionários'], ['ocor', '📝 Ocorrências'], ['folha', '💰 Folha'], ['rel', '📊 Relatório']];
+  const body = { func: rhFuncionarios, ocor: rhOcorrencias, folha: rhFolha, rel: rhRelatorio }[rhui.tab]();
   return `<div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${rhui.tab === k ? 'active' : ''}" data-rhtab="${k}">${l}</button>`).join('')}</div>${body}`;
 }
 
@@ -343,6 +343,7 @@ function bindRH(v) {
   $('#payMonth')?.addEventListener('change', (e) => { rhui.pay.month = e.target.value; render(); });
   $('#payWeek')?.addEventListener('change', (e) => { rhui.pay.week = e.target.value; render(); });
   $('#genPay')?.addEventListener('click', generatePayroll);
+  bindFolhaReport(v);
 }
 
 async function generatePayroll() {

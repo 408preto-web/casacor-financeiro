@@ -38,6 +38,8 @@ nem as contas de salário (área **Pessoal**) — inclusive nas listas e relató
   falta = salário ÷ 30 ou ÷ 6 dias; hora extra = valor da hora + 50%).
 - **Folha:** gera as contas a pagar do dia 15, do dia 30 (restante + ajustes do mês) ou da semana, com conferência antes
   e sem permitir gerar o mesmo pagamento duas vezes.
+- **Relatório:** folha do mês por funcionário (salário, extras, VA, VT, descontos, total, pago/a pagar), por área e
+  detalhada por pagamento; **imprime / salva em PDF** para a diretoria e exporta para Excel.
 - **Avisos:** fim da experiência, férias com prazo-limite (e vencidas) e aniversários.
 
 ## 🚧 Portaria da obra
@@ -80,3 +82,4 @@ O porteiro cria o acesso no celular/tablet e o administrador o aprova como **Por
 | `sw.js`, `manifest.webmanifest`, `icons/` | Instalação como app |
 | `portaria.js`, `supabase-portaria.sql` | Portaria da obra (entradas, saídas, ambientes, relatório) |
 | `comprovante.js` | Anexar comprovante: lê o arquivo (PDF ou foto) e sugere a conta; no Android aparece no menu Compartilhar |
+| `rh-relatorio.js` | Relatório da folha de pagamento (tela, PDF e Excel) |
