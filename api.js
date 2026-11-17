@@ -103,10 +103,20 @@ const api = {
     if (!res.ok) throw new ApiError(dbErrorText(d, res.status));
     return d;
   },
-  select(table, query = '') { return this.rest('GET', `${table}?${query}`); },
-  insert(table, rows) { return this.rest('POST', table, rows); },
-  update(table, filter, patch) { return this.rest('PATCH', `${table}?${filter}`, patch); },
-  remove(table, filter) { return this.rest('DELETE', `${table}?${filter}`); },
+  // Franquia atual (Ceará, Piauí…): as tabelas separadas por franquia são filtradas e gravadas com ela.
+  unit: null,
+  unitTables: new Set(['areas', 'cards', 'settings', 'bills', 'employees', 'hr_events', 'gate_envs', 'gate_people', 'gate_entries']),
+  withUnit(table, q) {
+    if (!this.unit || !this.unitTables.has(table) || /(^|&)unit=/.test(q)) return q;
+    return `${q ? q + '&' : ''}unit=eq.${encodeURIComponent(this.unit)}`;
+  },
+  select(table, query = '') { return this.rest('GET', `${table}?${this.withUnit(table, query)}`); },
+  insert(table, rows) {
+    const add = (r) => (this.unit && this.unitTables.has(table) && !r.unit ? { ...r, unit: this.unit } : r);
+    return this.rest('POST', table, Array.isArray(rows) ? rows.map(add) : add(rows));
+  },
+  update(table, filter, patch) { return this.rest('PATCH', `${table}?${this.withUnit(table, filter)}`, patch); },
+  remove(table, filter) { return this.rest('DELETE', `${table}?${this.withUnit(table, filter)}`); },
   rpc(fn, args) { return this.rest('POST', `rpc/${fn}`, args); },
 
   /* ---------- anexos (Storage, bucket privado "anexos") ---------- */

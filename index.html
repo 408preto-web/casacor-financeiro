@@ -21,8 +21,8 @@
 
   <div class="app" id="app" hidden>
     <nav class="sidebar" aria-label="Navegação principal">
-      <div class="brand">
-        <span class="cc-logo"><img src="icons/casacor.png" alt="CASACOR" class="cc-word"><b>Ceará</b></span>
+      <div class="brand" id="brandBtn" title="Trocar de franquia">
+        <span class="cc-logo"><img src="icons/casacor.png" alt="CASACOR" class="cc-word"><b id="unitName">Ceará</b><i id="unitCaret" hidden>▾</i></span>
         <small class="cc-sub">Pagamentos</small>
       </div>
       <button class="nav-item" data-view="painel"><span class="ni">🏠</span><span>Painel</span><span class="nav-badge" hidden></span></button>
@@ -40,6 +40,7 @@
       <header class="topbar">
         <h1 id="viewTitle"></h1>
         <div class="topbar-actions">
+          <button class="unit-pill" id="unitPill" title="Trocar de franquia" hidden></button>
           <button class="sync-pill" id="syncPill" title="Atualizar"></button>
           <button class="btn primary" id="addBtn">+ Lançar conta</button>
         </div>

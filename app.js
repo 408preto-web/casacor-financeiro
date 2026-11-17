@@ -70,7 +70,43 @@ const ROLES = {
 
 /* ---------- Estado ---------- */
 const CACHE_KEY = 'casacor:cache';
-const state = { me: null, members: [], areas: [], cards: [], settings: { edition: '' }, bills: [], loadedAt: null };
+const state = { me: null, members: [], areas: [], cards: [], settings: { edition: '' }, bills: [], loadedAt: null, units: [], unit: 'ce' };
+
+/* ---------- Franquias (Ceará, Piauí…) ---------- */
+const UNIT_KEY = 'casacor:unit';
+const unitsOn = () => Array.isArray(state.me?.units) && (state.units || []).length > 0; // banco já tem franquias
+const myUnits = () => (!unitsOn() ? [] : state.me.role === 'admin' ? state.units : state.units.filter((u) => state.me.units.includes(u.code)));
+const unitName = (code = state.unit) => (state.units || []).find((u) => u.code === code)?.name || (code === 'pi' ? 'Piauí' : 'Ceará');
+const unitNames = (codes) => (codes || []).map((c) => unitName(c)).join(' e ');
+function pickUnit() {
+  const mine = myUnits().map((u) => u.code);
+  if (!mine.length) return state.unit || 'ce';
+  let saved = ''; try { saved = localStorage.getItem(UNIT_KEY) || ''; } catch { /* ignora */ }
+  return mine.includes(state.unit) ? state.unit : mine.includes(saved) ? saved : mine[0];
+}
+function applyUnit() {
+  api.unit = unitsOn() ? state.unit : null;
+  try { localStorage.setItem(UNIT_KEY, state.unit); localStorage.setItem(UNIT_KEY + ':name', unitName()); } catch { /* ignora */ }
+}
+function switchUnit(code) {
+  if (code === state.unit) return;
+  state.unit = code; applyUnit();
+  // limpa os dados da franquia anterior enquanto carrega a nova
+  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], settings: { edition: '' } });
+  ui.filter = { q: '', area: '', who: '', method: '', month: '', edition: '' }; ui.report = { edition: '', from: '', to: '' };
+  if (isGateOnly()) ui.view = 'portaria';
+  render(); toast(`Agora: CASACOR ${unitName(code)}`);
+  loadAll();
+}
+function openUnitPicker() {
+  const list = myUnits(); if (list.length < 2) return;
+  openModal(`<h2>Qual franquia?</h2>
+    <div class="unit-list">${list.map((u) => `<button type="button" class="unit-opt ${u.code === state.unit ? 'sel' : ''}" data-unitpick="${u.code}">
+      <span class="cc-logo"><img src="icons/casacor.png" alt="CASACOR" class="cc-word"><b>${esc(u.name)}</b></span>${u.code === state.unit ? '<span class="badge open">atual</span>' : ''}</button>`).join('')}</div>
+    <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Fechar</button></div>`, () => {},
+  () => $$('[data-unitpick]', modalForm).forEach((b) => b.addEventListener('click', () => { modal.close(); switchUnit(b.dataset.unitpick); })));
+}
+const unitChecks = (name, selected) => `<div class="unit-checks">${state.units.map((u) => `<label class="check"><input type="checkbox" name="${name}" value="${u.code}" ${selected.includes(u.code) ? 'checked' : ''}><span>${esc(u.name)}</span></label>`).join('')}</div>`;
 const ui = { view: 'painel', tab: 'pending', filter: { q: '', area: '', who: '', method: '', month: '', edition: '' }, report: { edition: '', from: '', to: '' }, loading: false, offline: false };
 
 const isPayer = () => ['payer', 'admin'].includes(state.me?.role);
@@ -95,7 +131,7 @@ function saveCache() { try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ..
 function loadCache() {
   try {
     const c = JSON.parse(localStorage.getItem(CACHE_KEY));
-    if (c && c.me && c.me.user_id === api.session()?.user.id) Object.assign(state, c);
+    if (c && c.me && c.me.user_id === api.session()?.user.id) { Object.assign(state, c); applyUnit(); }
   } catch { /* ignora */ }
 }
 
@@ -103,15 +139,21 @@ async function loadAll({ quiet = false } = {}) {
   if (ui.loading && Date.now() - (ui.loadingSince || 0) < 60000) return; // trava de segurança: nunca fica preso "atualizando"
   ui.loading = true; ui.loadingSince = Date.now(); updatePill();
   try {
-    const [members, areas, cards, settings, bills] = await Promise.all([
+    const [members, units] = await Promise.all([
       api.select('members', 'select=*&order=name'),
+      api.select('units', 'select=*&order=sort').catch(() => []),
+    ]);
+    const me0 = members.find((m) => m.user_id === api.session().user.id);
+    if (me0) state.me = me0;
+    state.units = units || [];
+    state.unit = pickUnit(); applyUnit();
+    const [areas, cards, settings, bills] = await Promise.all([
       api.select('areas', 'select=*&order=sort,name'),
       api.select('cards', 'select=*&order=name'),
       api.select('settings', 'select=*'),
       api.select('bills', 'select=*&order=due_date,created_at'),
     ]);
-    const me = members.find((m) => m.user_id === api.session().user.id);
-    if (me) state.me = me;
+    const me = me0;
     Object.assign(state, { members, areas, cards, settings: settings[0] || { edition: '' }, bills: bills.map(normBill), loadedAt: Date.now() });
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
     await loadGate(); // portaria da obra (portaria.js)
@@ -142,7 +184,7 @@ function toast(msg) {
 function showGate(html) {
   $('#app').hidden = true; $('#fab').hidden = true;
   const g = $('#gate'); g.hidden = false;
-  g.innerHTML = `<div class="gate-card"><div class="gate-brand"><span class="cc-logo big"><img src="icons/casacor.png" alt="CASACOR" class="cc-word"><b>Ceará</b></span>
+  g.innerHTML = `<div class="gate-card"><div class="gate-brand"><span class="cc-logo big"><img src="icons/casacor.png" alt="CASACOR" class="cc-word"><b>${esc((() => { try { return localStorage.getItem(UNIT_KEY + ':name') || 'Ceará'; } catch { return 'Ceará'; } })())}</b></span>
     <span>Controle de pagamentos</span></div>${html}</div>`;
 }
 
@@ -184,7 +226,7 @@ function gateInvite(mode = 'signup', msg = '') {
   const first = (inv.name || '').split(' ')[0];
   showGate(`
     <h2>Olá${first ? ', ' + esc(first) : ''}! 👋</h2>
-    <p class="muted" style="margin-top:-4px">Você foi convidado(a) para o sistema da CASACOR Ceará${ROLES[inv.role] ? ' como <b>' + esc(ROLES[inv.role].label) + '</b>' : ''}. ${signup ? 'Só falta criar sua senha.' : 'Entre com seu e-mail e senha.'}</p>
+    <p class="muted" style="margin-top:-4px">Você foi convidado(a) para o sistema da CASACOR ${esc(inv.unit || 'Ceará')}${ROLES[inv.role] ? ' como <b>' + esc(ROLES[inv.role].label) + '</b>' : ''}. ${signup ? 'Só falta criar sua senha.' : 'Entre com seu e-mail e senha.'}</p>
     <form id="gateForm" class="form-grid one">
       ${signup ? `<label class="field"><span>Seu nome</span><input name="name" autocomplete="name" required value="${esc(inv.name || '')}"></label>` : ''}
       <label class="field"><span>E-mail</span><input name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" required></label>
@@ -285,6 +327,8 @@ function startApp() {
     $('#addBtn').addEventListener('click', () => openBillForm());
     $('#fab').addEventListener('click', () => openBillForm());
     $('#syncPill').addEventListener('click', () => loadAll());
+    $('#unitPill').addEventListener('click', openUnitPicker);
+    $('#brandBtn').addEventListener('click', openUnitPicker);
     window.addEventListener('online', () => loadAll({ quiet: true }));
     window.addEventListener('offline', () => { ui.offline = true; updatePill(); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadAll({ quiet: true }); });
@@ -303,7 +347,7 @@ async function boot() {
     return gateNewPassword(h.get('access_token'));
   }
   if (h.get('convite')) {
-    sessionStorage.setItem(INVITE_KEY, JSON.stringify({ token: h.get('convite'), name: h.get('nome') || '', role: h.get('funcao') || '' }));
+    sessionStorage.setItem(INVITE_KEY, JSON.stringify({ token: h.get('convite'), name: h.get('nome') || '', role: h.get('funcao') || '', unit: h.get('franquia') || '' }));
     history.replaceState(null, '', location.pathname);
   }
   if (pendingInvite()) return api.session() ? acceptInvite() : gateInvite();
@@ -329,6 +373,10 @@ function render() {
   $('#viewTitle').textContent = TITLES[ui.view];
   $('#fab').hidden = false;
   $('#sidebarUser').innerHTML = `<b>${esc(state.me.name)}</b><span>${ROLES[state.me.role]?.label || ''}</span>`;
+  const multi = myUnits().length > 1;
+  $('#unitName').textContent = unitName(); $('#unitCaret').hidden = !multi; $('#brandBtn').classList.toggle('switchable', multi);
+  document.title = `CASACOR ${unitName()} — Pagamentos`;
+  const up = $('#unitPill'); up.hidden = !multi; up.innerHTML = `📍 <span>${esc(unitName())}</span> ▾`; up.dataset.unit = state.unit;
   if (ui.view === 'rh' && !isHR()) ui.view = 'painel';
   // Porteiro: só a tela da portaria, grande e simples
   document.body.classList.toggle('gate-mode', isGateOnly());
@@ -641,7 +689,8 @@ function renderEquipe() {
   const row = (m) => `<li class="member-row">
       <div class="avatar">${esc((m.name || '?').charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-title">${esc(m.name)}${m.user_id === state.me.user_id ? ' <span class="muted">(você)</span>' : ''}</div>
-        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}</div></div>
+        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}${unitsOn() && state.units.length > 1 ? ` · 📍 ${m.role === 'admin' ? 'todas as franquias' : esc(unitNames(m.units)) || '—'}` : ''}</div>
+        ${isAdmin() && unitsOn() && state.units.length > 1 && m.role !== 'admin' ? `<div class="unit-checks small">${state.units.map((u) => `<label class="check"><input type="checkbox" data-munit="${m.user_id}" value="${u.code}" ${(m.units || []).includes(u.code) ? 'checked' : ''}><span>${esc(u.name)}</span></label>`).join('')}</div>` : ''}</div>
       <div class="row-actions">${isAdmin() ? `${roleSel(m)}${m.role !== 'admin' && 'can_hr' in m ? `<label class="check hr-toggle"><input type="checkbox" data-hr="${m.user_id}" ${m.can_hr ? 'checked' : ''}><span>Acesso ao RH</span></label>` : ''}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
     </li>`;
   return `
@@ -742,6 +791,11 @@ function bindView() {
     }));
     $$('[data-approve]', v).forEach((b) => b.addEventListener('click', () => openApprove(b.dataset.approve)));
     $('#newInvite')?.addEventListener('click', openInviteForm);
+    $$('[data-munit]', v).forEach((c) => c.addEventListener('change', async () => {
+      const id = c.dataset.munit; const units = $$(`[data-munit="${id}"]`, v).filter((x) => x.checked).map((x) => x.value);
+      if (!units.length) { toast('A pessoa precisa de pelo menos uma franquia'); c.checked = true; return; }
+      try { await api.update('members', `user_id=eq.${id}`, { units }); toast('Franquias atualizadas'); await loadAll({ quiet: true }); render(); } catch (e) { toast(e.message); render(); }
+    }));
     $$('[data-invlink]', v).forEach((b) => b.addEventListener('click', () => showInviteLink(state.invites.find((i) => i.token === b.dataset.invlink))));
     $$('[data-invdel]', v).forEach((b) => b.addEventListener('click', async () => {
       if (!confirm('Cancelar este convite? O link deixa de funcionar.')) return;
@@ -1145,10 +1199,13 @@ function openApprove(userId) {
       <label class="field"><span>Função</span><select name="role">
         <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="admin">Administrador — tudo</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
       <label class="field"><span>Área principal (sugerida ao lançar)</span><select name="area"><option value="">—</option>${state.areas.map((a) => `<option>${esc(a.name)}</option>`).join('')}</select></label>
+      ${unitsOn() && state.units.length > 1 ? `<div class="field"><span>Franquias</span>${unitChecks('units', [state.unit])}</div>` : ''}
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Aprovar</button></div>`,
   async (action, fd) => {
-    await api.update('members', `user_id=eq.${userId}`, { name: fd.get('name').trim(), role: fd.get('role'), area: fd.get('area') });
+    const data = { name: fd.get('name').trim(), role: fd.get('role'), area: fd.get('area') };
+    if (unitsOn() && state.units.length > 1) { data.units = fd.getAll('units'); if (!data.units.length) { toast('Marque pelo menos uma franquia'); return false; } }
+    await api.update('members', `user_id=eq.${userId}`, data);
     toast('Acesso aprovado ✅'); await loadAll({ quiet: true }); render();
   });
 }
@@ -1160,23 +1217,26 @@ function openInviteForm() {
       <label class="field"><span>Nome</span><input name="name" required placeholder="Ex.: Amsterdã"></label>
       <label class="field"><span>Função</span><select name="role">
         <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
+      ${unitsOn() && state.units.length > 1 ? `<div class="field"><span>Franquias que a pessoa vai acessar</span>${unitChecks('units', [state.unit])}</div>` : ''}
       <p class="muted small" style="margin:0">Administrador e acesso ao RH você libera depois, aqui em Equipe.</p>
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Gerar convite</button></div>`,
   async (action, fd) => {
-    const [inv] = await api.insert('invites', { name: fd.get('name').trim(), role: fd.get('role') });
+    const data = { name: fd.get('name').trim(), role: fd.get('role') };
+    if (unitsOn()) { data.units = state.units.length > 1 ? fd.getAll('units') : [state.unit]; if (!data.units.length) { toast('Marque pelo menos uma franquia'); return false; } }
+    const [inv] = await api.insert('invites', data);
     await loadAll({ quiet: true }); render();
     setTimeout(() => showInviteLink(inv), 0);
   });
 }
 
 function inviteUrl(i) {
-  return `${location.origin}${location.pathname}#convite=${i.token}&nome=${encodeURIComponent(i.name)}&funcao=${i.role}`;
+  return `${location.origin}${location.pathname}#convite=${i.token}&nome=${encodeURIComponent(i.name)}&funcao=${i.role}${i.units?.length ? '&franquia=' + encodeURIComponent(unitNames(i.units)) : ''}`;
 }
 
 function showInviteLink(i) {
   const url = inviteUrl(i); const first = i.name.split(' ')[0];
-  const msg = `Olá, ${first}! Este é o seu acesso ao sistema da CASACOR Ceará${i.role === 'gate' ? ' (portaria da obra)' : ''}. Toque no link, coloque seu e-mail e crie uma senha:\n${url}`;
+  const msg = `Olá, ${first}! Este é o seu acesso ao sistema da CASACOR ${i.units?.length ? unitNames(i.units) : unitName()}${i.role === 'gate' ? ' (portaria da obra)' : ''}. Toque no link, coloque seu e-mail e crie uma senha:\n${url}`;
   openModal(`
     <h2>✉️ Convite de ${esc(i.name)}</h2>
     <p class="muted" style="margin-top:-6px">${esc(ROLES[i.role]?.label || '')} · o link vale por 7 dias e só pode ser usado uma vez.</p>
@@ -1217,7 +1277,7 @@ function openEditionForm() {
     <p class="muted small">Contas já lançadas mantêm a edição que tinham.</p>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Salvar</button></div>`,
   async (action, fd) => {
-    await api.update('settings', 'id=eq.1', { edition: fd.get('edition').trim() });
+    await api.update('settings', unitsOn() ? `unit=eq.${state.unit}` : 'id=eq.1', { edition: fd.get('edition').trim() });
     ui.filter.edition = ''; ui.report.edition = '';
     toast('Edição alterada'); await loadAll({ quiet: true }); render();
   });

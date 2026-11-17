@@ -644,3 +644,18 @@ button.chip { cursor: pointer; }
 .pr-logo b { font-size: 15px; font-weight: 400; }
 .gate-brand .cc-logo { color: var(--text); }
 .brand .cc-logo { flex-direction: row; align-items: baseline; font-size: inherit; }
+
+/* Franquias */
+.brand.switchable { cursor: pointer; border-radius: 12px; }
+.brand.switchable:hover { background: var(--surface-2); }
+#unitCaret { font-style: normal; font-size: 12px; color: var(--muted); margin-left: -2px; }
+.unit-pill { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.unit-pill[data-unit="pi"] { background: #e0f2fe; border-color: #7dd3fc; color: #075985; }
+@media (prefers-color-scheme: dark) { .unit-pill[data-unit="pi"] { background: #0c4a6e; border-color: #0369a1; color: #e0f2fe; } }
+.unit-list { display: grid; gap: 10px; margin: 6px 0 12px; }
+.unit-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.unit-opt.sel { border: 2px solid var(--primary); }
+.unit-opt .cc-word { height: 20px; }
+.unit-opt .cc-logo b { font-size: 20px; }
+.unit-checks { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.unit-checks.small { font-size: 13px; }

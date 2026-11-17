@@ -55,6 +55,16 @@ O porteiro cria o acesso no celular/tablet e o administrador o aprova como **Por
 - **Equipe (abas):** relatório por dia (por ambiente e por empresa, exporta CSV), cadastro dos **ambientes**
   (número, nome, arquiteto) e das **pessoas** (importar a equipe do RH, marcar crachá, bloquear).
 
+## 📍 Franquias (Ceará, Piauí)
+
+Ative rodando [`supabase-franquias.sql`](supabase-franquias.sql) no SQL Editor (depois dos outros). Tudo o que já existe
+fica no **Ceará**; o **Piauí** começa vazio, com as mesmas áreas. Contas, cartões, áreas, edição, RH/folha e portaria
+são separados por franquia — o próprio banco só mostra as franquias liberadas para cada pessoa.
+
+- **Trocar de franquia:** toque em **📍 Ceará ▾** no topo (ou no nome ao lado da logo, no menu).
+- **Quem vê o quê:** administradores veem todas; para os outros, marque **Ceará / Piauí** em **Equipe**.
+  Convites e aprovações já perguntam a franquia.
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -83,3 +93,4 @@ O porteiro cria o acesso no celular/tablet e o administrador o aprova como **Por
 | `portaria.js`, `supabase-portaria.sql` | Portaria da obra (entradas, saídas, ambientes, relatório) |
 | `comprovante.js` | Anexar comprovante: lê o arquivo (PDF ou foto) e sugere a conta; no Android aparece no menu Compartilhar |
 | `rh-relatorio.js` | Relatório da folha de pagamento (tela, PDF e Excel) |
+| `supabase-franquias.sql` | Separação por franquia (Ceará, Piauí) |
