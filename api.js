@@ -1,5 +1,12 @@
 'use strict';
 
+/** fetch com tempo-limite (a conexão pode travar quando o aparelho sai do descanso). */
+function fetchT(url, opts = {}, ms = 25000) {
+  const ac = new AbortController(); const t = setTimeout(() => ac.abort(), ms);
+  return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t));
+}
+
+
 /* =========================================================
    Comunicação com o Supabase (login, tabelas e anexos), sem bibliotecas.
    Endereço e chave pública ficam em config.js.
@@ -44,7 +51,7 @@ const api = {
     const headers = { apikey: c.key, 'Content-Type': 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
     let res;
-    try { res = await fetch(`${c.url}/auth/v1/${path}`, { method: 'POST', headers, body: JSON.stringify(body) }); }
+    try { res = await fetchT(`${c.url}/auth/v1/${path}`, { method: 'POST', headers, body: JSON.stringify(body) }); }
     catch { throw new ApiError('Sem conexão com a internet.'); }
     const d = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(authErrorText(d));
@@ -80,16 +87,19 @@ const api = {
   async rest(method, path, body, extraHeaders = {}) {
     const c = cfg();
     const token = await this.token();
-    let res;
+    let res, d;
+    // Tempo-limite: no iPad/iPhone uma conexão pode ficar "pendurada" depois que o aparelho dorme,
+    // e aí o app nunca mais atualizava até ser fechado.
+    const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), method === 'GET' ? 25000 : 45000);
     try {
       res = await fetch(`${c.url}/rest/v1/${path}`, {
-        method,
+        method, signal: ac.signal,
         headers: { apikey: c.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=representation', ...extraHeaders },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
-    } catch { throw new ApiError('Sem conexão com a internet.'); }
+      d = res.status === 204 ? null : await res.json().catch(() => null);
+    } catch { throw new ApiError('Sem conexão com a internet.'); } finally { clearTimeout(timer); }
     if (res.status === 204) return null;
-    const d = await res.json().catch(() => null);
     if (!res.ok) throw new ApiError(dbErrorText(d, res.status));
     return d;
   },

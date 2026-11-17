@@ -100,8 +100,8 @@ function loadCache() {
 }
 
 async function loadAll({ quiet = false } = {}) {
-  if (ui.loading) return;
-  ui.loading = true; updatePill();
+  if (ui.loading && Date.now() - (ui.loadingSince || 0) < 60000) return; // trava de segurança: nunca fica preso "atualizando"
+  ui.loading = true; ui.loadingSince = Date.now(); updatePill();
   try {
     const [members, areas, cards, settings, bills] = await Promise.all([
       api.select('members', 'select=*&order=name'),
@@ -343,8 +343,11 @@ function updatePill() {
   const el = $('#syncPill');
   if (!el) return;
   const t = state.loadedAt ? new Date(state.loadedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
-  el.className = `sync-pill ${ui.offline ? 'warn' : 'ok'}`;
-  el.innerHTML = ui.loading ? '🔄 <span class="sync-text">Atualizando…</span>' : ui.offline ? '📴 <span class="sync-text">Sem internet</span>' : `✅ <span class="sync-text">Atualizado ${t}</span>`;
+  const stale = state.loadedAt && Date.now() - state.loadedAt > 10 * 60000; // mais de 10 min sem conseguir atualizar
+  el.className = `sync-pill ${ui.offline || stale ? 'warn' : 'ok'}`;
+  el.innerHTML = ui.loading ? '🔄 <span class="sync-text">Atualizando…</span>' : ui.offline ? '📴 <span class="sync-text">Sem internet</span>'
+    : stale ? `⚠️ <span class="sync-text">Atualizado ${new Date(state.loadedAt).toLocaleDateString('pt-BR') !== new Date().toLocaleDateString('pt-BR') ? new Date(state.loadedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' : ''}${t} · toque aqui</span>`
+    : `✅ <span class="sync-text">Atualizado ${t}</span>`;
 }
 function updateBadges() {
   const n = isPayer() ? pendingBills().filter((b) => b.due_date <= todayISO()).length : 0;
