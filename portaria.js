@@ -11,7 +11,7 @@
 const SERVICES = [
   ['Pedreiro', '🧱'], ['Servente', '🪣'], ['Pintor', '🎨'], ['Eletricista', '💡'], ['Marceneiro', '🪚'], ['Gesseiro', '◻️'],
   ['Encanador', '🚰'], ['Serralheiro', '🔩'], ['Vidraceiro', '🪟'], ['Montador', '🔧'], ['Ar-condicionado', '❄️'], ['Jardineiro', '🌿'],
-  ['Entrega', '📦'], ['Limpeza', '🧹'], ['Visita', '👀'], ['Equipe Casa Cor', '🏠'],
+  ['Entrega', '📦'], ['Limpeza', '🧹'], ['Visita', '👀'], ['Equipe CASACOR', '🏠'],
 ];
 const gui = { tab: 'op', date: '', env: '', q: '', peopleQ: '', report: null };
 
@@ -120,7 +120,7 @@ function stepSearch(q) {
         : r.length ? `<ul class="g-pick">${r.map((p) => {
           const o = openEntryOf(p.id);
           return `<li><button type="button" data-gpick="${p.id}" class="${p.blocked ? 'blocked' : ''}"><b>${esc(p.name)}</b>
-            <span>${fmtCpfG(p.cpf)}${p.company ? ' · ' + esc(p.company) : ''}${p.is_team ? ' · Equipe Casa Cor' : ''}${o ? ' · <i>já está na obra</i>' : ''}${p.blocked ? ' · ⛔ BLOQUEADO' : ''}</span></button></li>`;
+            <span>${fmtCpfG(p.cpf)}${p.company ? ' · ' + esc(p.company) : ''}${p.is_team ? ' · Equipe CASACOR' : ''}${o ? ' · <i>já está na obra</i>' : ''}${p.blocked ? ' · ⛔ BLOQUEADO' : ''}</span></button></li>`;
         }).join('')}</ul>` : '<p class="muted g-hint">Ninguém encontrado. Toque em <b>PESSOA NOVA</b>.</p>';
       $$('[data-gpick]', box).forEach((b) => b.addEventListener('click', () => pickPerson(gPerson(b.dataset.gpick))));
     };
@@ -181,7 +181,7 @@ function pickPerson(p) {
   }
   const env = gEnv(p.last_env_id);
   if (p.is_team && env && env.active && p.last_service) return stepConfirm(p, { env, service: p.last_service }); // equipe: sempre igual
-  stepEnv(p, { lastEnvId: p.last_env_id, lastService: p.last_service || (p.is_team ? 'Equipe Casa Cor' : '') });
+  stepEnv(p, { lastEnvId: p.last_env_id, lastService: p.last_service || (p.is_team ? 'Equipe CASACOR' : '') });
 }
 
 function stepEnv(p, sel) {
@@ -216,7 +216,7 @@ function stepConfirm(p, sel) {
     <div class="g-modal"><h2>${sel.editId ? '✏️ Corrigir entrada' : 'Confirmar entrada'}</h2>
       <div class="g-summary">
         <div class="g-sum-name">${esc(p.name)}</div>
-        <div>${fmtCpfG(p.cpf)}${p.company ? ' · ' + esc(p.company) : ''}${p.is_team ? ' · Equipe Casa Cor' : ''}</div>
+        <div>${fmtCpfG(p.cpf)}${p.company ? ' · ' + esc(p.company) : ''}${p.is_team ? ' · Equipe CASACOR' : ''}</div>
         <div class="g-sum-line"><span>🏠 ${esc(envLabel(sel.env))}</span><button type="button" class="btn small" id="gChEnv">Mudar</button></div>
         <div class="g-sum-line"><span>🔨 ${esc(sel.service)}</span><button type="button" class="btn small" id="gChSvc">Mudar</button></div>
       </div>
@@ -351,11 +351,11 @@ function gateReport() {
   </div>
   <div class="grid cols-2 mt">
     <div class="card"><h2>Por ambiente</h2>${Object.keys(byEnv).length ? `<ul class="bars">${Object.entries(byEnv).sort((a, b) => b[1] - a[1]).map(([id, n]) => `<li><div class="bar-top"><span>${esc(envLabel(gEnv(id)))}</span><b>${n}</b></div><div class="bar"><div style="width:${(n / Math.max(...Object.values(byEnv))) * 100}%;background:var(--primary)"></div></div></li>`).join('')}</ul>` : '<div class="empty small">Sem entradas.</div>'}</div>
-    <div class="card"><h2>Por empresa</h2>${(() => { const c = {}; r.forEach((x) => { const k = gPerson(x.person_id)?.company || (gPerson(x.person_id)?.is_team ? 'Equipe Casa Cor' : 'Sem empresa'); c[k] = (c[k] || 0) + 1; }); const e = Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 12); return e.length ? `<ul class="bars">${e.map(([k, n]) => `<li><div class="bar-top"><span>${esc(k)}</span><b>${n}</b></div><div class="bar"><div style="width:${(n / e[0][1]) * 100}%;background:var(--primary)"></div></div></li>`).join('')}</ul>` : '<div class="empty small">Sem entradas.</div>'; })()}</div>
+    <div class="card"><h2>Por empresa</h2>${(() => { const c = {}; r.forEach((x) => { const k = gPerson(x.person_id)?.company || (gPerson(x.person_id)?.is_team ? 'Equipe CASACOR' : 'Sem empresa'); c[k] = (c[k] || 0) + 1; }); const e = Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 12); return e.length ? `<ul class="bars">${e.map(([k, n]) => `<li><div class="bar-top"><span>${esc(k)}</span><b>${n}</b></div><div class="bar"><div style="width:${(n / e[0][1]) * 100}%;background:var(--primary)"></div></div></li>`).join('')}</ul>` : '<div class="empty small">Sem entradas.</div>'; })()}</div>
   </div>
   <div class="card mt"><h2>Registros (${rows.length})</h2>
     ${rows.length ? `<div class="g-table-wrap"><table class="pay-table g-table"><thead><tr><th>Entrada</th><th>Saída</th><th>Nome</th><th>CPF</th><th>Empresa</th><th>Ambiente</th><th>Trabalho</th></tr></thead><tbody>
-      ${rows.map((x) => { const p = gPerson(x.person_id) || {}; return `<tr><td>${fmtTime(x.entered_at)}</td><td>${x.exited_at ? fmtTime(x.exited_at) : '<span class="g-in">na obra</span>'}</td><td><b>${esc(p.name || '—')}</b></td><td>${fmtCpfG(p.cpf)}</td><td>${esc(p.company || (p.is_team ? 'Equipe Casa Cor' : ''))}</td><td>${esc(envLabel(gEnv(x.env_id)))}</td><td>${esc(x.service)}</td></tr>`; }).join('')}
+      ${rows.map((x) => { const p = gPerson(x.person_id) || {}; return `<tr><td>${fmtTime(x.entered_at)}</td><td>${x.exited_at ? fmtTime(x.exited_at) : '<span class="g-in">na obra</span>'}</td><td><b>${esc(p.name || '—')}</b></td><td>${fmtCpfG(p.cpf)}</td><td>${esc(p.company || (p.is_team ? 'Equipe CASACOR' : ''))}</td><td>${esc(envLabel(gEnv(x.env_id)))}</td><td>${esc(x.service)}</td></tr>`; }).join('')}
     </tbody></table></div>` : '<div class="empty small">Nenhum registro.</div>'}
   </div>`;
 }
@@ -373,7 +373,7 @@ function exportGateCsv() {
   const rows = [['Data', 'Entrada', 'Saída', 'Nome', 'CPF', 'Empresa', 'Ambiente', 'Arquiteto', 'Trabalho']];
   r.slice().sort((a, b) => a.entered_at.localeCompare(b.entered_at)).forEach((x) => {
     const p = gPerson(x.person_id) || {}; const e = gEnv(x.env_id) || {};
-    rows.push([fmtDate(gui.date), fmtTime(x.entered_at), fmtTime(x.exited_at), p.name, fmtCpfG(p.cpf), p.company || (p.is_team ? 'Equipe Casa Cor' : ''), `${e.number ? e.number + ' · ' : ''}${e.name || ''}`, e.architect || '', x.service]);
+    rows.push([fmtDate(gui.date), fmtTime(x.entered_at), fmtTime(x.exited_at), p.name, fmtCpfG(p.cpf), p.company || (p.is_team ? 'Equipe CASACOR' : ''), `${e.number ? e.number + ' · ' : ''}${e.name || ''}`, e.architect || '', x.service]);
   });
   const csv = rows.map((l) => l.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
@@ -431,7 +431,7 @@ function openPersonForm(p) {
       <label class="field"><span>CPF</span><input name="cpf" value="${esc(fmtCpfG(p.cpf) === 'sem CPF' ? '' : fmtCpfG(p.cpf))}" inputmode="numeric"></label>
       <label class="field"><span>Empresa</span><input name="company" value="${esc(p.company)}"></label>
       <label class="field"><span>Telefone</span><input name="phone" value="${esc(p.phone)}" inputmode="tel"></label>
-      <label class="check full"><input type="checkbox" name="is_team" ${p.is_team ? 'checked' : ''}><span>Equipe Casa Cor (crachá)</span></label>
+      <label class="check full"><input type="checkbox" name="is_team" ${p.is_team ? 'checked' : ''}><span>Equipe CASACOR (crachá)</span></label>
       <label class="check full"><input type="checkbox" name="blocked" ${p.blocked ? 'checked' : ''}><span>⛔ Bloquear entrada</span></label>
       <label class="field full"><span>Motivo do bloqueio</span><input name="block_reason" value="${esc(p.block_reason)}"></label>
     </div>
@@ -452,8 +452,8 @@ function openPersonForm(p) {
 async function importTeamFromRH() {
   const common = envsSorted().find((e) => /comu|geral/i.test(e.name));
   const list = (state.employees || []).filter((e) => e.status === 'active' && !state.gatePeople.some((p) => (e.cpf && onlyDigits(p.cpf) === onlyDigits(e.cpf)) || normG(p.name) === normG(e.name)));
-  if (!list.length || !confirm(`Importar ${list.length} funcionário(s) do RH como "Equipe Casa Cor"?`)) return;
-  await api.insert('gate_people', list.map((e) => ({ name: e.name, cpf: e.cpf || '', is_team: true, company: 'Casa Cor', last_env_id: common?.id ?? null, last_service: e.job_title || 'Equipe Casa Cor' })));
+  if (!list.length || !confirm(`Importar ${list.length} funcionário(s) do RH como "Equipe CASACOR"?`)) return;
+  await api.insert('gate_people', list.map((e) => ({ name: e.name, cpf: e.cpf || '', is_team: true, company: 'CASACOR', last_env_id: common?.id ?? null, last_service: e.job_title || 'Equipe CASACOR' })));
   toast(`${list.length} importado(s) ✅`); await reloadGate();
 }
 

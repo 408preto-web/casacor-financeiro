@@ -108,7 +108,7 @@ function folhaPrintHTML(d) {
   const t = d.tot; const gen = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const typeLbl = { all: 'Mensalistas e semanalistas', monthly: 'Mensalistas', weekly: 'Semanalistas (obra)' }[rrep.type];
   return `<div class="pr">
-    <div class="pr-head"><div><h1>Folha de pagamento — ${esc(monthName(d.month))}</h1><p>Casa Cor Ceará${state.settings.edition ? ' · Edição ' + esc(state.settings.edition) : ''} · ${typeLbl}</p></div>
+    <div class="pr-head"><div><h1>Folha de pagamento — ${esc(monthName(d.month))}</h1><p>CASACOR Ceará${state.settings.edition ? ' · Edição ' + esc(state.settings.edition) : ''} · ${typeLbl}</p></div>
       <div class="pr-meta">Emitido em ${gen}<br>por ${esc(state.me.name)}</div></div>
     <table class="pr-sum"><tr>
       <td><span>Total da folha</span><b>${money(t.total)}</b></td><td><span>Salários</span><b>${money(t.base)}</b></td>
@@ -136,7 +136,7 @@ function printFolha() {
   let area = $('#printArea');
   if (!area) { area = document.createElement('div'); area.id = 'printArea'; document.body.appendChild(area); }
   area.innerHTML = folhaPrintHTML(d);
-  const old = document.title; document.title = `Folha de pagamento ${monthName(d.month)} - Casa Cor Ceara`;
+  const old = document.title; document.title = `Folha de pagamento ${monthName(d.month)} - CASACOR Ceara`;
   document.body.classList.add('printing');
   const done = () => { document.body.classList.remove('printing'); area.innerHTML = ''; document.title = old; };
   window.addEventListener('afterprint', done, { once: true });
@@ -176,7 +176,7 @@ function folhaPdfFile(d) {
   const typeLbl = { all: 'Mensalistas e semanalistas', monthly: 'Mensalistas', weekly: 'Semanalistas (obra)' }[rrep.type];
   doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(`Folha de pagamento — ${monthName(d.month)}`, M, 16);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(80);
-  doc.text(`Casa Cor Ceará${state.settings.edition ? ' · Edição ' + state.settings.edition : ''} · ${typeLbl}`, M, 22);
+  doc.text(`CASACOR Ceará${state.settings.edition ? ' · Edição ' + state.settings.edition : ''} · ${typeLbl}`, M, 22);
   doc.text(`Emitido em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} por ${state.me.name}`, W - M, 22, { align: 'right' });
   doc.setDrawColor(...BR); doc.setLineWidth(0.8); doc.line(M, 25, W - M, 25);
   const boxes = [['Total da folha', m(t.total)], ['Salários', m(t.base)], ['Extras / bônus', m(t.plus)], ['VA + VT', m(t.va + t.vt)], ['Descontos', neg(t.minus)], ['Pago', m(t.paid)], ['A pagar', m(t.total - t.paid)]];
@@ -219,7 +219,7 @@ function folhaPdfFile(d) {
   });
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(140); doc.text(`Página ${i} de ${pages}`, W - M, doc.internal.pageSize.getHeight() - 6, { align: 'right' }); }
-  const name = `Folha ${monthName(d.month)} - Casa Cor Ceara.pdf`.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const name = `Folha ${monthName(d.month)} - CASACOR Ceara.pdf`.normalize('NFD').replace(/[̀-ͯ]/g, '');
   return new File([doc.output('blob')], name, { type: 'application/pdf' });
 }
 

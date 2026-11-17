@@ -1,6 +1,6 @@
-# Casa Cor Ceará — Controle de Pagamentos
+# CASACOR Ceará — Controle de Pagamentos
 
-Sistema web (instalável no celular/iPad/computador) para a equipe lançar as contas a pagar da Casa Cor Ceará
+Sistema web (instalável no celular/iPad/computador) para a equipe lançar as contas a pagar da CASACOR Ceará
 e o financeiro ver o que vence e marcar como pago.
 
 ## Como funciona

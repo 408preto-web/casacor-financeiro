@@ -1,7 +1,7 @@
 'use strict';
 
 /* =========================================================
-   Casa Cor Ceará — Controle de Pagamentos
+   CASACOR Ceará — Controle de Pagamentos
    Quem compra lança a conta; quem paga (financeiro) vê o que vence e marca como pago.
    Dados no Supabase (api.js), compartilhados pela equipe.
    ========================================================= */
@@ -143,7 +143,7 @@ function showGate(html) {
   $('#app').hidden = true; $('#fab').hidden = true;
   const g = $('#gate'); g.hidden = false;
   g.innerHTML = `<div class="gate-card"><div class="gate-brand"><img src="icons/icon.svg" alt="" width="56" height="56">
-    <div><b>Casa Cor Ceará</b><span>Controle de pagamentos</span></div></div>${html}</div>`;
+    <div><b>CASACOR Ceará</b><span>Controle de pagamentos</span></div></div>${html}</div>`;
 }
 
 function gateLogin(mode = 'login', msg = '') {
@@ -184,7 +184,7 @@ function gateInvite(mode = 'signup', msg = '') {
   const first = (inv.name || '').split(' ')[0];
   showGate(`
     <h2>Olá${first ? ', ' + esc(first) : ''}! 👋</h2>
-    <p class="muted" style="margin-top:-4px">Você foi convidado(a) para o sistema da Casa Cor Ceará${ROLES[inv.role] ? ' como <b>' + esc(ROLES[inv.role].label) + '</b>' : ''}. ${signup ? 'Só falta criar sua senha.' : 'Entre com seu e-mail e senha.'}</p>
+    <p class="muted" style="margin-top:-4px">Você foi convidado(a) para o sistema da CASACOR Ceará${ROLES[inv.role] ? ' como <b>' + esc(ROLES[inv.role].label) + '</b>' : ''}. ${signup ? 'Só falta criar sua senha.' : 'Entre com seu e-mail e senha.'}</p>
     <form id="gateForm" class="form-grid one">
       ${signup ? `<label class="field"><span>Seu nome</span><input name="name" autocomplete="name" required value="${esc(inv.name || '')}"></label>` : ''}
       <label class="field"><span>E-mail</span><input name="email" type="email" autocomplete="username" inputmode="email" autocapitalize="off" required></label>
@@ -1176,7 +1176,7 @@ function inviteUrl(i) {
 
 function showInviteLink(i) {
   const url = inviteUrl(i); const first = i.name.split(' ')[0];
-  const msg = `Olá, ${first}! Este é o seu acesso ao sistema da Casa Cor Ceará${i.role === 'gate' ? ' (portaria da obra)' : ''}. Toque no link, coloque seu e-mail e crie uma senha:\n${url}`;
+  const msg = `Olá, ${first}! Este é o seu acesso ao sistema da CASACOR Ceará${i.role === 'gate' ? ' (portaria da obra)' : ''}. Toque no link, coloque seu e-mail e crie uma senha:\n${url}`;
   openModal(`
     <h2>✉️ Convite de ${esc(i.name)}</h2>
     <p class="muted" style="margin-top:-6px">${esc(ROLES[i.role]?.label || '')} · o link vale por 7 dias e só pode ser usado uma vez.</p>
