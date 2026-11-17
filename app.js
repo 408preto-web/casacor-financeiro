@@ -92,7 +92,7 @@ function switchUnit(code) {
   if (code === state.unit) return;
   state.unit = code; applyUnit();
   // limpa os dados da franquia anterior enquanto carrega a nova
-  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], settings: { edition: '' }, otherDue: [] });
+  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], obraStages: [], obraUpdates: [], settings: { edition: '' }, otherDue: [] });
   ui.filter = { q: '', area: '', who: '', method: '', month: '', edition: '' }; ui.report = { edition: '', from: '', to: '' };
   if (isGateOnly()) ui.view = 'portaria';
   render(); toast(`Agora: CASACOR ${unitName(code)}`);
@@ -157,6 +157,7 @@ async function loadAll({ quiet = false } = {}) {
     Object.assign(state, { members, areas, cards, settings: settings[0] || { edition: '' }, bills: bills.map(normBill), loadedAt: Date.now() });
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
     await loadGate(); // portaria da obra (portaria.js)
+    await loadObra(); // cronograma da obra (obra.js)
     state.invites = me?.role === 'admin' ? await api.select('invites', 'select=*&used_at=is.null&order=created_at.desc').catch(() => null) : null;
     await loadOtherUnitsDue();
     ui.offline = false;
@@ -347,6 +348,8 @@ async function boot() {
     history.replaceState(null, '', location.pathname);
     return gateNewPassword(h.get('access_token'));
   }
+  // QR Code de um ambiente da obra: página própria, sem login
+  if (h.get('obra')) return obraPublicPage(h.get('obra'));
   if (h.get('convite')) {
     sessionStorage.setItem(INVITE_KEY, JSON.stringify({ token: h.get('convite'), name: h.get('nome') || '', role: h.get('funcao') || '', unit: h.get('franquia') || '' }));
     history.replaceState(null, '', location.pathname);
@@ -362,7 +365,7 @@ async function boot() {
 }
 
 /* ---------- Navegação ---------- */
-const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', portaria: 'Portaria da obra', equipe: 'Equipe', ajustes: 'Ajustes' };
+const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', portaria: 'Portaria da obra', obra: 'Obra — cronograma', equipe: 'Equipe', ajustes: 'Ajustes' };
 function setView(v) {
   ui.view = v;
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
@@ -383,7 +386,9 @@ function render() {
   document.body.classList.toggle('gate-mode', isGateOnly());
   if (isGateOnly()) ui.view = 'portaria';
   $('.nav-item[data-view="rh"]').hidden = !isHR();
-  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, portaria: renderPortaria, equipe: renderEquipe, ajustes: renderAjustes };
+  $('.nav-item[data-view="obra"]').hidden = !canObra();
+  if (ui.view === 'obra' && !canObra()) ui.view = 'painel';
+  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, portaria: renderPortaria, obra: renderObra, equipe: renderEquipe, ajustes: renderAjustes };
   $('#view').innerHTML = views[ui.view]();
   bindView();
   updateBadges(); updatePill();
@@ -437,6 +442,8 @@ function updateBadges() {
   const others = otherUnitsSummary().reduce((s, u) => s + u.late[0] + u.today[0], 0);
   const n = isPayer() ? pendingBills().filter((b) => b.due_date <= todayISO()).length + others : 0;
   const pb = $('.nav-item[data-view="painel"] .nav-badge'); if (pb) { pb.textContent = n; pb.hidden = !n; }
+  const no = canObra() ? (state.obraStages || []).filter((x) => x.env_id != null && stageLate(x)).length : 0;
+  const ob = $('.nav-item[data-view="obra"] .nav-badge'); if (ob) { ob.textContent = no; ob.hidden = !no; }
   const np = isAdmin() ? state.members.filter((m) => m.role === 'pending').length : 0;
   const eb = $('.nav-item[data-view="equipe"] .nav-badge'); if (eb) { eb.textContent = np; eb.hidden = !np; }
   const nh = isHR() ? rhAlerts().filter((a) => a.level !== 'info').length + payrollReminders().filter((r) => r.n <= 1).length : 0;
@@ -818,6 +825,7 @@ function bindView() {
     $('#csv').addEventListener('click', exportCsv);
   }
   if (ui.view === 'portaria') bindPortaria(v);
+  if (ui.view === 'obra') bindObra(v);
   if (ui.view === 'rh') bindRH(v);
   else $$('[data-emp]', v).forEach((el) => el.addEventListener('click', () => openEmployee(el.dataset.emp)));
   $$('[data-genfolha]', v).forEach((b) => b.addEventListener('click', () => { const [t, d] = b.dataset.genfolha.split('|'); goToPayroll(t, d); }));

@@ -105,7 +105,7 @@ const api = {
   },
   // Franquia atual (Ceará, Piauí…): as tabelas separadas por franquia são filtradas e gravadas com ela.
   unit: null,
-  unitTables: new Set(['areas', 'cards', 'settings', 'bills', 'employees', 'hr_events', 'gate_envs', 'gate_people', 'gate_entries']),
+  unitTables: new Set(['areas', 'cards', 'settings', 'bills', 'employees', 'hr_events', 'gate_envs', 'gate_people', 'gate_entries', 'obra_stages', 'obra_updates']),
   withUnit(table, q) {
     if (!this.unit || !this.unitTables.has(table) || /(^|&)unit=/.test(q)) return q;
     return `${q ? q + '&' : ''}unit=eq.${encodeURIComponent(this.unit)}`;
@@ -133,6 +133,25 @@ const api = {
       const d = await res.json().catch(() => ({}));
       throw new ApiError(/payload too large|exceeded|size/i.test(d.message || d.error || '') ? 'Arquivo grande demais (máximo 10 MB).' : dbErrorText(d, res.status));
     }
+  },
+  /* ---------- sem login (QR Code da obra): só com a chave pública ---------- */
+  async publicRpc(fn, args) {
+    const c = cfg(); let res, d;
+    try {
+      res = await fetchT(`${c.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args) });
+      d = await res.json().catch(() => null);
+    } catch { throw new ApiError('Sem conexão com a internet.'); }
+    if (!res.ok) throw new ApiError(dbErrorText(d, res.status));
+    return d;
+  },
+  async publicUpload(path, blob, bucket) {
+    const c = cfg(); let res;
+    try {
+      res = await fetchT(`${c.url}/storage/v1/object/${bucket}/${path}`, {
+        method: 'POST', headers: { apikey: c.key, Authorization: `Bearer ${c.key}`, 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'false' }, body: blob,
+      }, 60000);
+    } catch { throw new ApiError('Sem conexão para enviar a foto.'); }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new ApiError(dbErrorText(d, res.status)); }
   },
   async signedUrl(path, bucket = 'anexos') {
     const c = cfg();

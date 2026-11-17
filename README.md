@@ -65,6 +65,19 @@ são separados por franquia — o próprio banco só mostra as franquias liberad
 - **Quem vê o quê:** administradores veem todas; para os outros, marque **Ceará / Piauí** em **Equipe**.
   Convites e aprovações já perguntam a franquia.
 
+## 🏗️ Obra — cronograma e QR Code
+
+Ative rodando [`supabase-obra.sql`](supabase-obra.sql) no SQL Editor (depois dos outros). Usa os **ambientes** da Portaria.
+
+- **Ambientes → Montar etapas:** escolhe as etapas (pintura, nivelamento, piso…) e distribui as datas entre o início
+  da obra e a entrega. Depois dá para ajustar cada etapa (datas, situação, %).
+- **Cronograma:** barras por ambiente e etapa, linha do dia de hoje, o que está atrasado, parado ou deveria ter
+  começado, e os **marcos** da obra (entrega aos arquitetos, abertura…).
+- **QR Codes:** folha para imprimir e colar em cada ambiente. Quem escaneia (sem login) escreve o nome, toca na etapa
+  e diz como está (começou, metade, quase pronto, concluído, parado), com observação e foto. Cada QR só mexe no
+  próprio ambiente.
+- **Atualizações:** histórico com nome, hora e fotos.
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -94,3 +107,4 @@ são separados por franquia — o próprio banco só mostra as franquias liberad
 | `comprovante.js` | Anexar comprovante: lê o arquivo (PDF ou foto) e sugere a conta; no Android aparece no menu Compartilhar |
 | `rh-relatorio.js` | Relatório da folha de pagamento (tela, PDF e Excel) |
 | `supabase-franquias.sql` | Separação por franquia (Ceará, Piauí) |
+| `obra.js`, `supabase-obra.sql` | Obra: cronograma, QR Code por ambiente e atualizações |
