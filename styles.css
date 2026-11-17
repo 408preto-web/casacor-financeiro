@@ -628,3 +628,19 @@ button.chip { cursor: pointer; }
 .pr-note { margin-top: 10px !important; font-style: italic; }
 .pr-sign { display: flex; justify-content: space-around; margin-top: 36px; text-align: center; color: #333; page-break-inside: avoid; }
 .btn.fr-wa { width: auto; margin: 0; display: inline-flex; }
+
+/* Logomarca CASACOR */
+.cc-logo { display: inline-flex; align-items: baseline; gap: 7px; white-space: nowrap; }
+.cc-logo .cc-word { height: 17px; width: auto; display: block; align-self: center; }
+.cc-logo b { font-size: 17px; font-weight: 400; letter-spacing: .01em; line-height: 1; }
+.cc-logo.big .cc-word { height: 24px; }
+.cc-logo.big b { font-size: 23px; }
+.brand { flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 12px 20px; }
+.brand .cc-sub { font-size: 12px; font-weight: 500; color: var(--muted); }
+.gate-brand { flex-direction: column; align-items: flex-start; gap: 6px; }
+@media (prefers-color-scheme: dark) { .cc-word { filter: invert(1); } }
+.pr-logo { display: flex; align-items: baseline; gap: 6px; margin-bottom: 6px; }
+.pr-logo img { height: 16px; align-self: center; }
+.pr-logo b { font-size: 15px; font-weight: 400; }
+.gate-brand .cc-logo { color: var(--text); }
+.brand .cc-logo { flex-direction: row; align-items: baseline; font-size: inherit; }

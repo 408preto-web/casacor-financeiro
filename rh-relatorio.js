@@ -108,7 +108,7 @@ function folhaPrintHTML(d) {
   const t = d.tot; const gen = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
   const typeLbl = { all: 'Mensalistas e semanalistas', monthly: 'Mensalistas', weekly: 'Semanalistas (obra)' }[rrep.type];
   return `<div class="pr">
-    <div class="pr-head"><div><h1>Folha de pagamento — ${esc(monthName(d.month))}</h1><p>CASACOR Ceará${state.settings.edition ? ' · Edição ' + esc(state.settings.edition) : ''} · ${typeLbl}</p></div>
+    <div class="pr-head"><div><div class="pr-logo"><img src="icons/casacor.png" alt="CASACOR"><b>Ceará</b></div><h1>Folha de pagamento — ${esc(monthName(d.month))}</h1><p>CASACOR Ceará${state.settings.edition ? ' · Edição ' + esc(state.settings.edition) : ''} · ${typeLbl}</p></div>
       <div class="pr-meta">Emitido em ${gen}<br>por ${esc(state.me.name)}</div></div>
     <table class="pr-sum"><tr>
       <td><span>Total da folha</span><b>${money(t.total)}</b></td><td><span>Salários</span><b>${money(t.base)}</b></td>
@@ -164,7 +164,11 @@ function exportFolhaCsv() {
 const JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
 const JSPDF_TABLE = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
 let pdfLibsReady = null;
-const loadPdfLibs = () => (pdfLibsReady ||= loadScriptOnce(JSPDF).then(() => loadScriptOnce(JSPDF_TABLE)).catch((e) => { pdfLibsReady = null; throw e; }));
+let ccLogo = null; // { data, w, h } da logomarca, para o PDF
+const loadLogo = () => fetch('icons/casacor.png').then((r) => r.blob()).then((b) => new Promise((res) => {
+  const fr = new FileReader(); fr.onload = () => { const img = new Image(); img.onload = () => { ccLogo = { data: fr.result, w: img.width, h: img.height }; res(); }; img.onerror = () => res(); img.src = fr.result; }; fr.readAsDataURL(b);
+})).catch(() => {});
+const loadPdfLibs = () => (pdfLibsReady ||= Promise.all([loadScriptOnce(JSPDF).then(() => loadScriptOnce(JSPDF_TABLE)), loadLogo()]).catch((e) => { pdfLibsReady = null; throw e; }));
 
 function folhaPdfFile(d) {
   const { jsPDF } = window.jspdf;
@@ -174,7 +178,9 @@ function folhaPdfFile(d) {
   const neg = (c) => (c ? '-' + m(c) : '—');
   const t = d.tot;
   const typeLbl = { all: 'Mensalistas e semanalistas', monthly: 'Mensalistas', weekly: 'Semanalistas (obra)' }[rrep.type];
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(`Folha de pagamento — ${monthName(d.month)}`, M, 16);
+  let lx = M;
+  if (ccLogo) { const h = 4.2, w = (ccLogo.w / ccLogo.h) * h; doc.addImage(ccLogo.data, 'PNG', M, 4.5, w, h); lx = M + w + 1.8; doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(20); doc.text('Ceará', lx, 8.4); }
+  doc.setTextColor(20); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(`Folha de pagamento — ${monthName(d.month)}`, M, 16);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(80);
   doc.text(`CASACOR Ceará${state.settings.edition ? ' · Edição ' + state.settings.edition : ''} · ${typeLbl}`, M, 22);
   doc.text(`Emitido em ${new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} por ${state.me.name}`, W - M, 22, { align: 'right' });

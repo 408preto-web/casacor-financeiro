@@ -142,8 +142,8 @@ function toast(msg) {
 function showGate(html) {
   $('#app').hidden = true; $('#fab').hidden = true;
   const g = $('#gate'); g.hidden = false;
-  g.innerHTML = `<div class="gate-card"><div class="gate-brand"><img src="icons/icon.svg" alt="" width="56" height="56">
-    <div><b>CASACOR Ceará</b><span>Controle de pagamentos</span></div></div>${html}</div>`;
+  g.innerHTML = `<div class="gate-card"><div class="gate-brand"><span class="cc-logo big"><img src="icons/casacor.png" alt="CASACOR" class="cc-word"><b>Ceará</b></span>
+    <span>Controle de pagamentos</span></div>${html}</div>`;
 }
 
 function gateLogin(mode = 'login', msg = '') {
