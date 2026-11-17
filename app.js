@@ -92,7 +92,7 @@ function switchUnit(code) {
   if (code === state.unit) return;
   state.unit = code; applyUnit();
   // limpa os dados da franquia anterior enquanto carrega a nova
-  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], settings: { edition: '' } });
+  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], settings: { edition: '' }, otherDue: [] });
   ui.filter = { q: '', area: '', who: '', method: '', month: '', edition: '' }; ui.report = { edition: '', from: '', to: '' };
   if (isGateOnly()) ui.view = 'portaria';
   render(); toast(`Agora: CASACOR ${unitName(code)}`);
@@ -158,6 +158,7 @@ async function loadAll({ quiet = false } = {}) {
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
     await loadGate(); // portaria da obra (portaria.js)
     state.invites = me?.role === 'admin' ? await api.select('invites', 'select=*&used_at=is.null&order=created_at.desc').catch(() => null) : null;
+    await loadOtherUnitsDue();
     ui.offline = false;
     saveCache();
     if (!me || !['member', 'payer', 'admin', 'gate'].includes(me.role)) return boot();
@@ -397,8 +398,44 @@ function updatePill() {
     : stale ? `⚠️ <span class="sync-text">Atualizado ${new Date(state.loadedAt).toLocaleDateString('pt-BR') !== new Date().toLocaleDateString('pt-BR') ? new Date(state.loadedAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' : ''}${t} · toque aqui</span>`
     : `✅ <span class="sync-text">Atualizado ${t}</span>`;
 }
+/* ---------- Avisos das outras franquias (só o que vence até amanhã) ---------- */
+async function loadOtherUnitsDue() {
+  const others = myUnits().map((u) => u.code).filter((c) => c !== state.unit);
+  if (!isPayer() || !others.length) { state.otherDue = []; return; }
+  try {
+    const rows = await api.select('bills', `select=id,unit,supplier,amount,due_date,method,card_id&status=eq.pending&due_date=lte.${addDaysISO(todayISO(), 1)}&unit=in.(${others.join(',')})&order=due_date`);
+    state.otherDue = rows.map((b) => ({ ...b, cents: toCents(b.amount) }));
+  } catch { state.otherDue = state.otherDue || []; }
+}
+/** Por franquia: atrasadas, hoje e amanhã (compras no cartão contam como uma fatura). */
+function otherUnitsSummary() {
+  const today = todayISO(), tomorrow = addDaysISO(today, 1); const by = {};
+  const seen = new Set();
+  for (const b of state.otherDue || []) {
+    if (b.unit === state.unit) continue;
+    const key = b.method === 'cartao' && b.card_id ? `${b.unit}|${b.card_id}|${b.due_date}` : b.id;
+    const u = (by[b.unit] ||= { unit: b.unit, late: [0, 0], today: [0, 0], tomorrow: [0, 0], names: [] });
+    const slot = b.due_date < today ? u.late : b.due_date === today ? u.today : b.due_date === tomorrow ? u.tomorrow : null;
+    if (!slot) continue;
+    if (!seen.has(key)) { seen.add(key); slot[0]++; if (u.names.length < 4) u.names.push(b.method === 'cartao' ? 'Fatura do cartão' : b.supplier); }
+    slot[1] += b.cents;
+  }
+  return Object.values(by).filter((u) => u.late[0] + u.today[0] + u.tomorrow[0] > 0);
+}
+function otherUnitsAlert() {
+  return otherUnitsSummary().map((u) => {
+    const parts = [u.late[0] ? `<b>${u.late[0]} atrasada${u.late[0] > 1 ? 's' : ''}</b> (${money(u.late[1])})` : '',
+      u.today[0] ? `<b>${u.today[0]} vence${u.today[0] > 1 ? 'm' : ''} hoje</b> (${money(u.today[1])})` : '',
+      u.tomorrow[0] ? `${u.tomorrow[0]} vence${u.tomorrow[0] > 1 ? 'm' : ''} amanhã (${money(u.tomorrow[1])})` : ''].filter(Boolean);
+    return `<div class="alerts"><div class="alert ${u.late[0] ? 'danger' : 'info'} other-unit"><span class="alert-icon">📍</span>
+      <div class="alert-text"><b>${esc(unitName(u.unit))}:</b> ${parts.join(' · ')}<span class="muted"> ${u.names.map(esc).join(', ')}</span></div>
+      <button class="btn small" data-gounit="${u.unit}">Ver no ${esc(unitName(u.unit))}</button></div></div>`;
+  }).join('');
+}
+
 function updateBadges() {
-  const n = isPayer() ? pendingBills().filter((b) => b.due_date <= todayISO()).length : 0;
+  const others = otherUnitsSummary().reduce((s, u) => s + u.late[0] + u.today[0], 0);
+  const n = isPayer() ? pendingBills().filter((b) => b.due_date <= todayISO()).length + others : 0;
   const pb = $('.nav-item[data-view="painel"] .nav-badge'); if (pb) { pb.textContent = n; pb.hidden = !n; }
   const np = isAdmin() ? state.members.filter((m) => m.role === 'pending').length : 0;
   const eb = $('.nav-item[data-view="equipe"] .nav-badge'); if (eb) { eb.textContent = np; eb.hidden = !np; }
@@ -509,6 +546,7 @@ function renderPainel() {
   ${waitingAlert}
   ${alert}
   ${tomorrowAlert}
+  ${isPayer() ? otherUnitsAlert() : ''}
   ${isHR() ? payrollBanner() : ''}
   ${isHR() ? rhAlertsBanner() : ''}
   <div class="grid cols-4">
@@ -758,6 +796,7 @@ function bindView() {
   $$('[data-invoice]', v).forEach((el) => el.addEventListener('click', () => openInvoice(el.dataset.invoice)));
   $$('[data-go]', v).forEach((el) => el.addEventListener('click', () => setView(el.dataset.go)));
   $('#rcOpen', v)?.addEventListener('click', () => openReceiptFlow());
+  $$('[data-gounit]', v).forEach((b) => b.addEventListener('click', () => { ui.view = 'painel'; switchUnit(b.dataset.gounit); }));
   $$('[data-copy]', v).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); copyText($('#' + b.dataset.copy).textContent); }));
 
   if (ui.view === 'contas') {
