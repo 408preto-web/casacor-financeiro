@@ -476,11 +476,18 @@ function statusBadge(b) {
   return '';
 }
 
+/** Opções de categoria da área (mantém uma categoria antiga que não está mais na lista). */
+function catOptions(areaId, current = '') {
+  const cats = areaCats(areaId);
+  const list = current && !cats.includes(current) ? [...cats, current] : cats;
+  return `<option value="">${list.length ? 'Escolha…' : '— (área sem categorias)'}</option>${list.map((c) => `<option ${c === current ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+}
+
 function billRow(b, { showDue = true } = {}) {
   const a = areaById(b.area_id);
   const m = METHODS[b.method];
   const sub = [
-    `<span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}`,
+    `<span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}${b.category ? ' › ' + esc(b.category) : ''}`,
     `${m.icon} ${b.method === 'cartao' ? esc(cardLabel(cardById(b.card_id))) : m.label}`,
     `por ${esc(firstName(b.created_by))}`,
     b.installment ? `parcela ${esc(b.installment)}` : '',
@@ -671,6 +678,11 @@ function group(list, keyFn, labelFn, colorFn) {
   return Object.entries(m).map(([k, v]) => ({ k, v, label: labelFn(k), color: colorFn?.(k) })).sort((a, b) => b.v - a.v);
 }
 function renderRelatorios() {
+  const tabs = `<div class="tabs">${[['area', '🧾 Por área e categoria'], ['geral', '📊 Visão geral']].map(([k, l]) => `<button class="tab ${(ui.report.tab || 'area') === k ? 'active' : ''}" data-rtab="${k}">${l}</button>`).join('')}</div>`;
+  if ((ui.report.tab || 'area') === 'area') return tabs + renderAreaReport();
+  return tabs + renderRelatoriosGeral();
+}
+function renderRelatoriosGeral() {
   const r = ui.report;
   const list = reportBills();
   const paid = list.filter((b) => b.status === 'paid');
@@ -819,10 +831,12 @@ function bindView() {
     $$('[data-editcard]', v).forEach((b) => b.addEventListener('click', () => openCardForm(cardById(b.dataset.editcard))));
   }
   if (ui.view === 'relatorios') {
-    $('#redition').addEventListener('change', (e) => { ui.report.edition = e.target.value; render(); });
-    $('#rfrom').addEventListener('change', (e) => { ui.report.from = e.target.value; render(); });
-    $('#rto').addEventListener('change', (e) => { ui.report.to = e.target.value; render(); });
-    $('#csv').addEventListener('click', exportCsv);
+    $$('[data-rtab]', v).forEach((b) => b.addEventListener('click', () => { ui.report.tab = b.dataset.rtab; render(); }));
+    $('#redition')?.addEventListener('change', (e) => { ui.report.edition = e.target.value; render(); });
+    $('#rfrom')?.addEventListener('change', (e) => { ui.report.from = e.target.value; render(); });
+    $('#rto')?.addEventListener('change', (e) => { ui.report.to = e.target.value; render(); });
+    $('#csv')?.addEventListener('click', exportCsv);
+    bindAreaReport(v);
   }
   if (ui.view === 'portaria') bindPortaria(v);
   if (ui.view === 'obra') bindObra(v);
@@ -956,6 +970,7 @@ function openBillForm(bill, defaults = {}) {
       <label class="field full"><span>Descrição (o que está pagando)</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: Salário de março, tinta do ambiente 3, buffet da abertura…"></label>
       <label class="field"><span>Valor (R$) *</span><input class="amount-input" name="amount" inputmode="decimal" placeholder="0,00" value="${b.cents ? centsToInput(b.cents) : ''}" required autocomplete="off"></label>
       <label class="field"><span>Área *</span><select name="area_id" required><option value="">Escolha…</option>${state.areas.filter((a) => a.active || String(a.id) === String(b.area_id)).map((a) => `<option value="${a.id}" ${String(a.id) === String(b.area_id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+      ${catsOn() ? `<label class="field"><span>Categoria (o que é)</span><select name="category" id="bCat">${catOptions(b.area_id, b.category)}</select></label>` : ''}
       <label class="field"><span>Data da compra</span><input type="date" name="purchase_date" value="${b.purchase_date}" required></label>
       <label class="field"><span>Edição</span><input name="edition" value="${esc(b.edition)}" inputmode="numeric" placeholder="Ex.: 2027"></label>
       <div class="field full"><span>Forma de pagamento *</span>
@@ -1007,6 +1022,7 @@ function openBillForm(bill, defaults = {}) {
       bank_info: method === 'transferencia' ? fd.get('bank_info').trim() : '', card_id: card ? card.id : null, notes: fd.get('notes').trim(),
     };
     if (!base.supplier || !base.area_id) { toast('Preencha fornecedor e área'); return false; }
+    if (catsOn()) base.category = fd.get('category') || '';
     const id = isEdit ? bill.id : uuid();
     const groupId = n > 1 ? uuid() : null;
     const folder = groupId || id;
@@ -1036,6 +1052,7 @@ function openBillForm(bill, defaults = {}) {
     await loadAll({ quiet: true });
     render();
   }, () => {
+    $('[name="area_id"]', modalForm)?.addEventListener('change', (e) => { const c = $('#bCat'); if (c) c.innerHTML = catOptions(e.target.value, c.value); });
     const val = (n) => $(`[name="${n}"]`, modalForm)?.value;
     const sync = () => {
       const m = $('[name="method"]:checked', modalForm)?.value;
@@ -1097,7 +1114,7 @@ function openBill(id) {
     <div class="detail-head"><div><h2 style="margin:0">${esc(b.supplier)}</h2><div class="muted">${esc(b.description || '')}</div></div>
       <div class="detail-amount">${money(b.cents)} ${statusBadge(b)}</div></div>
     <dl class="detail">
-      <dt>Área</dt><dd><span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}${b.edition ? ` · edição ${esc(b.edition)}` : ''}</dd>
+      <dt>Área</dt><dd><span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}${b.category ? ' › <b>' + esc(b.category) + '</b>' : ''}${b.edition ? ` · edição ${esc(b.edition)}` : ''}</dd>
       <dt>Lançada por</dt><dd>${esc(memberName(b.created_by))} · ${new Date(b.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</dd>
       <dt>Data da compra</dt><dd>${fmtDate(b.purchase_date)}</dd>
       <dt>${b.method === 'cartao' ? 'Fatura vence' : 'Pagar até'}</dt><dd><b>${fmtDate(b.due_date)}</b>${b.status === 'pending' ? ` · ${dueText(b.due_date)}` : ''}</dd>
@@ -1227,10 +1244,12 @@ function openAreaForm(area) {
       <label class="field"><span>Nome</span><input name="name" value="${esc(a.name)}" required></label>
       <label class="field"><span>Cor</span><input type="color" name="color" value="${a.color}"></label>
       <label class="check full"><input type="checkbox" name="active" ${a.active ? 'checked' : ''}><span>Ativa (aparece ao lançar contas)</span></label>
+      ${catsOn() ? `<label class="field full"><span>Categorias (uma por linha) — aparecem ao lançar e no relatório</span><textarea name="categories" rows="8" placeholder="Ex.:\nMão de obra\nMaterial de construção\nFrete">${esc((a.categories || []).join('\n'))}</textarea></label>` : ''}
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Salvar</button></div>`,
   async (action, fd) => {
     const data = { name: fd.get('name').trim(), color: fd.get('color'), active: fd.get('active') === 'on' };
+    if (catsOn()) data.categories = [...new Set(String(fd.get('categories') || '').split('\n').map((x) => x.trim()).filter(Boolean))];
     if (area) await api.update('areas', `id=eq.${area.id}`, data); else await api.insert('areas', { ...data, sort: a.sort });
     toast('Área salva'); await loadAll({ quiet: true }); render();
   });

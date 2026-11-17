@@ -78,6 +78,17 @@ Ative rodando [`supabase-obra.sql`](supabase-obra.sql) no SQL Editor (depois dos
   próprio ambiente.
 - **Atualizações:** histórico com nome, hora e fotos.
 
+## 🧾 Relatório por área e categoria
+
+Ative rodando [`supabase-categorias.sql`](supabase-categorias.sql) no SQL Editor. Cada área ganha uma lista de
+**categorias** (ex.: Obra → Mão de obra, Material de construção, Frete…; Marketing → Mídia paga, Gráfica…), que
+aparece ao lançar a conta e pode ser mudada em **Ajustes → Áreas**.
+
+Em **Relatórios → Por área e categoria**: escolha a área (ou todas), o período e se quer só pagas/a pagar — mostra
+quanto foi gasto em cada categoria e o detalhe de cada conta. A **folha de pagamento** entra na área do funcionário
+(ex.: semanalistas da obra contam em Obra). Contas antigas sem categoria podem ser classificadas em lote.
+Envia o PDF pelo WhatsApp, imprime ou exporta para Excel.
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -108,3 +119,4 @@ Ative rodando [`supabase-obra.sql`](supabase-obra.sql) no SQL Editor (depois dos
 | `rh-relatorio.js` | Relatório da folha de pagamento (tela, PDF e Excel) |
 | `supabase-franquias.sql` | Separação por franquia (Ceará, Piauí) |
 | `obra.js`, `supabase-obra.sql` | Obra: cronograma, QR Code por ambiente e atualizações |
+| `relatorio-area.js`, `supabase-categorias.sql` | Categorias por área e relatório de gastos por área |

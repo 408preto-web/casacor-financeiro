@@ -767,3 +767,17 @@ button.chip { cursor: pointer; }
 .op-choice.sel { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, var(--surface)); }
 .op-choice.done.sel { border-color: #16a34a; background: #dcfce7; color: #14532d; }
 .op-choice.blocked.sel { border-color: #dc2626; background: #fee2e2; color: #7f1d1d; }
+
+/* Relatório por área */
+.ar-areas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ar-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.ar-chip.sel { border: 2px solid var(--c, var(--primary)); background: color-mix(in srgb, var(--c, var(--primary)) 12%, var(--surface)); }
+.ar-link { cursor: pointer; text-decoration: underline dotted; }
+.ar-cat { border-bottom: 1px solid var(--border); padding: 4px 0; }
+.ar-cat summary { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; cursor: pointer; list-style: none; }
+.ar-cat summary::before { content: '▸'; color: var(--muted); margin-right: 6px; }
+.ar-cat[open] summary::before { content: '▾'; }
+.ar-cat summary b:first-of-type { flex: 1; }
+.ar-cls { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; max-height: 60vh; overflow: auto; }
+.ar-cls li { display: grid; grid-template-columns: 1fr minmax(160px, 45%); gap: 8px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+@media (max-width: 600px) { .ar-cls li { grid-template-columns: 1fr; } }
