@@ -480,7 +480,8 @@ function statusBadge(b) {
 function catOptions(areaId, current = '') {
   const cats = areaCats(areaId);
   const list = current && !cats.includes(current) ? [...cats, current] : cats;
-  return `<option value="">${list.length ? 'Escolha…' : '— (área sem categorias)'}</option>${list.map((c) => `<option ${c === current ? 'selected' : ''}>${esc(c)}</option>`).join('')}`;
+  if (!areaId) return '<option value="">Escolha a área primeiro</option>';
+  return `<option value="">${list.length ? 'Escolha…' : '— (área sem categorias)'}</option>${list.map((c) => `<option ${c === current ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">➕ Criar categoria…</option>`;
 }
 
 function billRow(b, { showDue = true } = {}) {
@@ -967,10 +968,10 @@ function openBillForm(bill, defaults = {}) {
     <div class="form-grid">
       <label class="field full"><span>Fornecedor *</span><input name="supplier" list="suppliers" value="${esc(b.supplier)}" required placeholder="Quem vai receber o pagamento" autocomplete="off">
         <datalist id="suppliers">${suppliers.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></label>
-      <label class="field full"><span>Descrição (o que está pagando)</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: Salário de março, tinta do ambiente 3, buffet da abertura…"></label>
+      <label class="field ${catsOn() ? '' : 'full'}"><span>Área *</span><select name="area_id" required><option value="">Escolha…</option>${state.areas.filter((a) => a.active || String(a.id) === String(b.area_id)).map((a) => `<option value="${a.id}" ${String(a.id) === String(b.area_id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+      ${catsOn() ? `<label class="field"><span>Categoria *</span><select name="category" id="bCat" ${b.area_id ? '' : 'disabled'}>${catOptions(b.area_id, b.category)}</select></label>` : ''}
+      <label class="field full"><span>Descrição ${catsOn() ? '(detalhe, opcional)' : '(o que está pagando)'}</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: convites da abertura, tinta do ambiente 3, salário de março…"></label>
       <label class="field"><span>Valor (R$) *</span><input class="amount-input" name="amount" inputmode="decimal" placeholder="0,00" value="${b.cents ? centsToInput(b.cents) : ''}" required autocomplete="off"></label>
-      <label class="field"><span>Área *</span><select name="area_id" required><option value="">Escolha…</option>${state.areas.filter((a) => a.active || String(a.id) === String(b.area_id)).map((a) => `<option value="${a.id}" ${String(a.id) === String(b.area_id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
-      ${catsOn() ? `<label class="field"><span>Categoria (o que é)</span><select name="category" id="bCat">${catOptions(b.area_id, b.category)}</select></label>` : ''}
       <label class="field"><span>Data da compra</span><input type="date" name="purchase_date" value="${b.purchase_date}" required></label>
       <label class="field"><span>Edição</span><input name="edition" value="${esc(b.edition)}" inputmode="numeric" placeholder="Ex.: 2027"></label>
       <div class="field full"><span>Forma de pagamento *</span>
@@ -1022,7 +1023,10 @@ function openBillForm(bill, defaults = {}) {
       bank_info: method === 'transferencia' ? fd.get('bank_info').trim() : '', card_id: card ? card.id : null, notes: fd.get('notes').trim(),
     };
     if (!base.supplier || !base.area_id) { toast('Preencha fornecedor e área'); return false; }
-    if (catsOn()) base.category = fd.get('category') || '';
+    if (catsOn()) {
+      base.category = fd.get('category') === '__new' ? '' : fd.get('category') || '';
+      if (!base.category && areaCats(base.area_id).length) { toast('Escolha a categoria (o que é)'); return false; }
+    }
     const id = isEdit ? bill.id : uuid();
     const groupId = n > 1 ? uuid() : null;
     const folder = groupId || id;
@@ -1052,7 +1056,21 @@ function openBillForm(bill, defaults = {}) {
     await loadAll({ quiet: true });
     render();
   }, () => {
-    $('[name="area_id"]', modalForm)?.addEventListener('change', (e) => { const c = $('#bCat'); if (c) c.innerHTML = catOptions(e.target.value, c.value); });
+    const catSel = $('#bCat');
+    $('[name="area_id"]', modalForm)?.addEventListener('change', (e) => { if (catSel) { catSel.disabled = !e.target.value; catSel.innerHTML = catOptions(e.target.value, ''); } });
+    let lastCat = catSel?.value || '';
+    catSel?.addEventListener('change', async () => {
+      if (catSel.value !== '__new') { lastCat = catSel.value; return; }
+      const areaId = $('[name="area_id"]', modalForm).value;
+      const name = (prompt(`Nova categoria em ${areaById(areaId).name}:`) || '').trim();
+      if (!name) { catSel.innerHTML = catOptions(areaId, lastCat); return; }
+      try {
+        const cats = await api.rpc('add_area_category', { p_area: Number(areaId), p_name: name });
+        const a = state.areas.find((x) => String(x.id) === String(areaId)); if (a && Array.isArray(cats)) a.categories = cats;
+        lastCat = (cats || []).find((c) => c.toLowerCase() === name.toLowerCase()) || name;
+        catSel.innerHTML = catOptions(areaId, lastCat); toast(`Categoria "${lastCat}" criada ✅`);
+      } catch (err) { toast(/add_area_category|não foi configurado/.test(err.message) ? 'Rode de novo o supabase-categorias.sql para poder criar categorias aqui.' : err.message); catSel.innerHTML = catOptions(areaId, lastCat); }
+    });
     const val = (n) => $(`[name="${n}"]`, modalForm)?.value;
     const sync = () => {
       const m = $('[name="method"]:checked', modalForm)?.value;

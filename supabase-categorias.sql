@@ -32,3 +32,27 @@ where categories = '{}' and lower(name) like 'administr%';
 
 update public.areas set categories = array['Salários', 'Vale-alimentação e vale-transporte', 'Encargos (INSS, FGTS)', 'Férias e 13º', 'Rescisões', 'Outros']
 where categories = '{}' and lower(name) like 'pessoal%';
+
+-- ---------- Criar categoria na hora de lançar a conta (qualquer pessoa da equipe) ----------
+create or replace function public.add_area_category(p_area bigint, p_name text) returns text[]
+language plpgsql security definer set search_path = public as $$
+declare
+  a public.areas;
+  n text := regexp_replace(trim(coalesce(p_name, '')), '\s+', ' ', 'g');
+begin
+  select * into a from public.areas where id = p_area;
+  if not found or not public.is_member() or not public.has_unit(a.unit) then
+    raise exception 'Você não tem permissão para isso.';
+  end if;
+  if n = '' or length(n) > 60 then raise exception 'Escreva o nome da categoria (até 60 letras).'; end if;
+  if not exists (select 1 from unnest(a.categories) c where lower(c) = lower(n)) then
+    -- entra antes de "Outros", que fica sempre por último
+    update public.areas
+       set categories = array_remove(categories, 'Outros') || n
+                        || case when 'Outros' = any(categories) then array['Outros'] else '{}'::text[] end
+     where id = p_area returning * into a;
+  end if;
+  return a.categories;
+end;
+$$;
+grant execute on function public.add_area_category(bigint, text) to authenticated;
