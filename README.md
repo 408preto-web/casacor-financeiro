@@ -89,6 +89,16 @@ quanto foi gasto em cada categoria e o detalhe de cada conta. A **folha de pagam
 (ex.: semanalistas da obra contam em Obra). Contas antigas sem categoria podem ser classificadas em lote.
 Envia o PDF pelo WhatsApp, imprime ou exporta para Excel.
 
+## 💾 Onde ficam os dados e cópia de segurança
+
+- **Dados** (contas, equipe, RH, portaria, obra): banco de dados PostgreSQL no **Supabase**.
+- **Arquivos** (notas, boletos, comprovantes, documentos do RH, fotos da obra): **Supabase Storage**
+  (pastas `anexos`, `rh` e `obra`, privadas).
+- **O app** (as telas): este repositório no GitHub, publicado no GitHub Pages. Não guarda dados.
+
+**Cópia de segurança:** em **Ajustes → 💾 Cópia de segurança** (só administradores) baixa uma planilha Excel com
+todos os dados de todas as franquias, uma aba por assunto. O Painel lembra quando passar 30 dias sem cópia.
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -120,3 +130,4 @@ Envia o PDF pelo WhatsApp, imprime ou exporta para Excel.
 | `supabase-franquias.sql` | Separação por franquia (Ceará, Piauí) |
 | `obra.js`, `supabase-obra.sql` | Obra: cronograma, QR Code por ambiente e atualizações |
 | `relatorio-area.js`, `supabase-categorias.sql` | Categorias por área e relatório de gastos por área |
+| `backup.js` | Cópia de segurança em planilha Excel |

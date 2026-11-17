@@ -564,6 +564,7 @@ function renderPainel() {
   ${isPayer() ? otherUnitsAlert() : ''}
   ${isHR() ? payrollBanner() : ''}
   ${isHR() ? rhAlertsBanner() : ''}
+  ${backupBanner()}
   <div class="grid cols-4">
     <div class="card stat ${late.length ? 'stat-danger' : ''}"><div class="label">Atrasadas</div><div class="value ${late.length ? 'neg' : ''}">${money(sumCents(late))}</div><div class="sub">${late.length} conta(s)</div></div>
     <div class="card stat ${now.length ? 'stat-warn' : ''}"><div class="label">Vencem hoje</div><div class="value">${money(sumCents(now))}</div><div class="sub">${now.length} conta(s)</div></div>
@@ -797,6 +798,7 @@ function renderAjustes() {
         <p class="muted"><b>iPhone/iPad:</b> no Safari, Compartilhar (□↑) → <b>Adicionar à Tela de Início</b>.<br>
         <b>Android:</b> no Chrome, menu <b>⋮</b> → <b>Instalar app</b>.</p>
       </div>
+      ${backupCard()}
     </div>
     <div>
       <div class="card"><div class="card-head"><h2>Áreas (setores)</h2>${isAdmin() ? '<button class="btn small primary" id="newArea">+ Nova</button>' : ''}</div>
@@ -816,6 +818,8 @@ function bindView() {
   $$('[data-invoice]', v).forEach((el) => el.addEventListener('click', () => openInvoice(el.dataset.invoice)));
   $$('[data-go]', v).forEach((el) => el.addEventListener('click', () => setView(el.dataset.go)));
   $('#rcOpen', v)?.addEventListener('click', () => openReceiptFlow());
+  $('#bkBtn', v)?.addEventListener('click', makeBackup);
+  $('#bkNow', v)?.addEventListener('click', makeBackup);
   $$('[data-gounit]', v).forEach((b) => b.addEventListener('click', () => { ui.view = 'painel'; switchUnit(b.dataset.gounit); }));
   $$('[data-copy]', v).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); copyText($('#' + b.dataset.copy).textContent); }));
 
