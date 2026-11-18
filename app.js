@@ -88,6 +88,22 @@ function applyUnit() {
   api.unit = unitsOn() ? state.unit : null;
   try { localStorage.setItem(UNIT_KEY, state.unit); localStorage.setItem(UNIT_KEY + ':name', unitName()); } catch { /* ignora */ }
 }
+/** Franquia sem áreas (ex.: Piauí recém-criado): copia as áreas e categorias de outra franquia. */
+const otherUnitWithAreasName = () => unitName((state.units || []).find((u) => u.code !== state.unit)?.code || 'ce');
+async function copyAreasFromOtherUnit() {
+  try {
+    const from = (state.units || []).filter((u) => u.code !== state.unit).map((u) => u.code);
+    let src = [];
+    for (const code of from.length ? from : ['ce']) { src = await api.select('areas', `select=*&unit=eq.${code}&order=sort`); if (src.length) break; }
+    if (!src.length) { toast('Não achei áreas em outra franquia. Crie em Ajustes → Áreas → + Nova.'); return false; }
+    const rows = src.filter((a) => a.active).map((a) => ({ name: a.name, color: a.color, sort: a.sort, active: true, ...(Array.isArray(a.categories) ? { categories: a.categories } : {}) }));
+    await api.insert('areas', rows);
+    state.areas = await api.select('areas', 'select=*&order=sort,name');
+    saveCache(); toast(`${rows.length} áreas criadas em ${unitName()} ✅`);
+    return true;
+  } catch (e) { toast(e.message); return false; }
+}
+
 function switchUnit(code) {
   if (code === state.unit) return;
   state.unit = code; applyUnit();
@@ -802,6 +818,7 @@ function renderAjustes() {
     </div>
     <div>
       <div class="card"><div class="card-head"><h2>Áreas (setores)</h2>${isAdmin() ? '<button class="btn small primary" id="newArea">+ Nova</button>' : ''}</div>
+        ${!state.areas.length ? `<div class="empty small">Nenhuma área nesta franquia.${isAdmin() ? ` <button class="btn small primary" id="copyAreas2">Copiar as áreas do ${esc(otherUnitWithAreasName())}</button>` : ''}</div>` : ''}
         <ul class="tx-list">${state.areas.map((a) => `<li class="member-row"><span class="area-dot big" style="--c:${a.color}"></span>
           <div class="tx-main"><div class="tx-title">${esc(a.name)} ${a.active ? '' : '<span class="badge">inativa</span>'}</div>
           <div class="tx-meta">${state.bills.filter((b) => String(b.area_id) === String(a.id)).length} conta(s)</div></div>
@@ -879,6 +896,7 @@ function bindView() {
     $('#editMe').addEventListener('click', () => openMemberForm(state.me, true));
     $('#editEdition')?.addEventListener('click', openEditionForm);
     $('#newArea')?.addEventListener('click', () => openAreaForm());
+    $('#copyAreas2')?.addEventListener('click', async () => { if (await copyAreasFromOtherUnit()) render(); });
     $$('[data-editarea]', v).forEach((b) => b.addEventListener('click', () => openAreaForm(state.areas.find((a) => String(a.id) === b.dataset.editarea))));
   }
 }
@@ -972,6 +990,9 @@ function openBillForm(bill, defaults = {}) {
     <div class="form-grid">
       <label class="field full"><span>Fornecedor *</span><input name="supplier" list="suppliers" value="${esc(b.supplier)}" required placeholder="Quem vai receber o pagamento" autocomplete="off">
         <datalist id="suppliers">${suppliers.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></label>
+      ${!state.areas.length ? `<div class="field full no-areas">${isAdmin()
+        ? `<b>Esta franquia (${esc(unitName())}) ainda não tem áreas.</b> <button type="button" class="btn small primary" id="copyAreas">Criar as áreas (copiar do ${esc(otherUnitWithAreasName())})</button>`
+        : `<b>Esta franquia (${esc(unitName())}) ainda não tem áreas.</b> Peça para a administração criá-las em Ajustes.`}</div>` : ''}
       <label class="field ${catsOn() ? '' : 'full'}"><span>Área *</span><select name="area_id" required><option value="">Escolha…</option>${state.areas.filter((a) => a.active || String(a.id) === String(b.area_id)).map((a) => `<option value="${a.id}" ${String(a.id) === String(b.area_id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
       ${catsOn() ? `<label class="field"><span>Categoria *</span><select name="category" id="bCat" ${b.area_id ? '' : 'disabled'}>${catOptions(b.area_id, b.category)}</select></label>` : ''}
       <label class="field full"><span>Descrição ${catsOn() ? '(detalhe, opcional)' : '(o que está pagando)'}</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: convites da abertura, tinta do ambiente 3, salário de março…"></label>
@@ -1060,6 +1081,13 @@ function openBillForm(bill, defaults = {}) {
     await loadAll({ quiet: true });
     render();
   }, () => {
+    $('#copyAreas', modalForm)?.addEventListener('click', async (e) => {
+      e.target.disabled = true; e.target.textContent = 'Criando…';
+      if (!(await copyAreasFromOtherUnit())) { e.target.disabled = false; e.target.textContent = 'Tentar de novo'; return; }
+      // reabre o formulário (agora com áreas e categorias) mantendo o que já foi digitado
+      const v = (n) => $(`[name="${n}"]`, modalForm)?.value || '';
+      openBillForm(null, { supplier: v('supplier'), description: v('description'), cents: parseMoney(v('amount')) });
+    });
     const catSel = $('#bCat');
     $('[name="area_id"]', modalForm)?.addEventListener('change', (e) => { if (catSel) { catSel.disabled = !e.target.value; catSel.innerHTML = catOptions(e.target.value, ''); } });
     let lastCat = catSel?.value || '';
