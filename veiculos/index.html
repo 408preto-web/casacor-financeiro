@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Garagem — Controle de veículos</title>
+  <meta name="description" content="Abastecimentos, consumo, manutenções e documentos dos veículos">
+  <meta name="theme-color" content="#1d4ed8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Garagem">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="gate" class="gate" hidden></div>
+
+  <div class="app" id="app" hidden>
+    <nav class="sidebar" aria-label="Navegação principal">
+      <div class="brand brand-g"><img src="icons/icon.svg" alt=""><span>Garagem<small>Controle de veículos</small></span></div>
+      <button class="nav-item" data-view="painel"><span class="ni">🏠</span><span>Painel</span><span class="nav-badge" hidden></span></button>
+      <button class="nav-item" data-view="abastecimentos"><span class="ni">⛽</span><span>Abastecer</span></button>
+      <button class="nav-item" data-view="manutencao"><span class="ni">🔧</span><span>Manutenção</span></button>
+      <button class="nav-item" data-view="relatorios"><span class="ni">📊</span><span>Relatórios</span></button>
+      <button class="nav-item" data-view="veiculos"><span class="ni">🚗</span><span>Veículos</span></button>
+      <button class="nav-item" data-view="pessoas"><span class="ni">👥</span><span>Pessoas</span><span class="nav-badge" hidden></span></button>
+      <button class="nav-item" data-view="ajustes"><span class="ni">⚙️</span><span>Ajustes</span></button>
+      <div class="sidebar-user" id="sidebarUser"></div>
+    </nav>
+
+    <main class="content">
+      <header class="topbar">
+        <h1 id="viewTitle"></h1>
+        <div class="topbar-actions">
+          <button class="sync-pill" id="syncPill" title="Atualizar"></button>
+          <button class="btn primary" id="addFuel">⛽ Abastecer</button>
+          <button class="btn" id="addService">🔧 Despesa</button>
+        </div>
+      </header>
+      <section id="view"></section>
+    </main>
+  </div>
+
+  <button class="fab" id="fab" aria-label="Lançar" hidden>+</button>
+
+  <dialog id="modal">
+    <form method="dialog" id="modalForm" class="modal-body"></form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../config.js"></script>
+  <script src="api.js"></script>
+  <script src="relatorios.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
