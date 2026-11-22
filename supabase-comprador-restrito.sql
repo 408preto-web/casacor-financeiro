@@ -1,20 +1,20 @@
 -- =====================================================================
--- CASACOR — Comprador restrito: lança compras e vê SÓ o que ele mesmo lançou
+-- CASACOR — Comprador vê SÓ o que ele mesmo lançou (Pagador e Administrador veem tudo)
 -- Cole no Supabase em: SQL Editor → New query → Run. Pode rodar mais de uma vez.
 -- Rode DEPOIS do supabase-franquias.sql e do supabase-admin-franquia.sql.
 --
--- • Em Equipe, marque "Vê só o que lança" num Comprador (ou convide como
---   "Comprador — vê só o que ele lança").
--- • Ele não vê as contas dos outros, nem a portaria e a obra (o banco bloqueia).
+-- • Vale para TODOS que estão como Comprador. Quem precisa ver tudo deve ser Pagador
+--   (lança, paga e vê tudo) ou Administrador.
+-- • O Comprador não vê as contas dos outros, nem a portaria e a obra (o banco bloqueia).
 -- =====================================================================
 
 alter table public.members add column if not exists only_own boolean not null default false;
 alter table public.invites add column if not exists only_own boolean not null default false;
 
--- Comprador restrito (só vale para a função Comprador)
+-- TODO Comprador é restrito: vê só o que ele lançou (Pagador e Administrador veem tudo)
 create or replace function public.only_own() returns boolean
 language sql stable security definer set search_path = public as $$
-  select coalesce((select m.only_own and m.role = 'member' from public.members m where m.user_id = auth.uid()), false)
+  select coalesce((select m.role = 'member' from public.members m where m.user_id = auth.uid()), false)
 $$;
 grant execute on function public.only_own() to authenticated;
 
