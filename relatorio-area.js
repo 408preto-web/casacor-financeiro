@@ -26,7 +26,9 @@ function areaReportData() {
   const st = r.status || 'all';
   const list = reportBills().filter((b) => st === 'all' || b.status === st);
   const areaId = r.area || '';
-  const inArea = areaId ? list.filter((b) => effArea(b) === String(areaId)) : list;
+  // Na área escolhida entra o que foi lançado nela (ex.: Pessoal = toda a folha) e a folha dos funcionários dessa área
+  // (ex.: Obra = gastos da obra + folha dos semanalistas da obra). Em "Todas", cada conta conta uma vez só.
+  const inArea = areaId ? list.filter((b) => effArea(b) === String(areaId) || String(b.area_id) === String(areaId)) : list;
   const cats = new Map();
   for (const b of inArea) {
     const k = effCat(b); const c = cats.get(k) || { name: k, total: 0, paid: 0, n: 0, bills: [] };
@@ -75,7 +77,7 @@ function renderAreaReport() {
       <ul class="tx-list">${c.bills.map((b) => `<li class="tx" data-bill="${b.id}"><div class="tx-main"><div class="tx-title">${esc(b.supplier)}${b.description ? ` <span class="muted">— ${esc(b.description)}</span>` : ''}</div>
         <div class="tx-meta">${b.status === 'paid' ? `pago ${fmtDate(b.paid_at)}` : `vence ${fmtDate(b.due_date)}`}${!d.areaId ? ' · ' + esc(areaById(effArea(b)).name) : ''}${b.employee_id && String(b.area_id) !== effArea(b) ? ' · folha' : ''}</div></div>
         <div class="tx-amount ${b.status === 'paid' ? 'pos' : 'neg'}">${money(billAmt(b))}<small>${b.status === 'paid' ? 'pago' : 'a pagar'}</small></div></li>`).join('')}</ul></details>`).join('')}</div>` : `<div class="card mt"><div class="empty small">Nenhuma conta ${a ? 'em ' + esc(a.name) : ''} neste período.</div></div>`;
-  const note = isHR() ? '<p class="muted small mt">A folha de pagamento entra na área de cada funcionário (cadastro do RH) — ex.: os semanalistas da obra contam em <b>Obra</b>.</p>' : '';
+  const note = isHR() ? '<p class="muted small mt">A folha de pagamento aparece em <b>Pessoal</b> (folha completa) e também na área de cada funcionário (cadastro do RH) — ex.: os semanalistas da obra contam em <b>Obra</b>. Em <b>Todas</b>, cada pagamento é somado uma vez só.</p>' : '';
   return head + cards + uncat + byAreaCard + catCard + detail + note;
 }
 
