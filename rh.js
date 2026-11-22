@@ -304,6 +304,14 @@ function rhFolha() {
   const pending = rows.filter((r) => !r.done && r.total > 0);
   const tot = pending.reduce((s, r) => s + r.total, 0);
   const label = { M15: 'Mensalistas — dia 15 (1ª parte)', M30: 'Mensalistas — dia 30 (fechamento do mês)', W: 'Semanalistas — pagamento da semana' };
+  // Quem é desse tipo mas não entra porque a admissão está depois da data do pagamento (ex.: cadastrado com a data de hoje)
+  const sameType = (e) => e.status === 'active' && (p.type === 'W' ? e.pay_type === 'weekly' : e.pay_type === 'monthly');
+  const afterAdm = state.employees.filter((e) => sameType(e) && e.admission_date > date);
+  const otherType = state.employees.filter((e) => e.status === 'active' && !sameType(e));
+  const missingHint = afterAdm.length ? `<div class="alerts mt"><div class="alert info"><span class="alert-icon">❓</span><div class="alert-text">
+      <b>Não ${afterAdm.length > 1 ? 'aparecem' : 'aparece'} aqui porque a admissão está depois de ${fmtDate(date)}:</b>
+      ${afterAdm.map((e) => `<button class="link-btn" data-emp="${e.id}">${esc(e.name)} (admissão ${fmtDate(e.admission_date)})</button>`).join(', ')}.
+      <span class="muted">Se já trabalhava antes, toque no nome → <b>Editar</b> e corrija a data de admissão.</span></div></div></div>` : '';
   return `
   <div class="card">
     <div class="chips-select" style="margin-bottom:12px">${Object.entries(label).map(([k, l]) => `<label class="chip-opt"><input type="radio" name="paytype" value="${k}" ${p.type === k ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
@@ -325,8 +333,8 @@ function rhFolha() {
       <div class="list-total"><span>${pending.length} pagamento(s) a gerar · vencimento ${fmtDate(date)}</span><b>${money(tot)}</b></div>
       <div class="row-actions mt"><button class="btn primary" id="genPay" ${pending.length ? '' : 'disabled'}>Gerar contas a pagar</button></div>
       <p class="muted small">Cada pagamento vira uma conta a pagar na área <b>Pessoal</b> (visível só para quem tem acesso ao RH). Não é possível gerar o mesmo pagamento duas vezes.</p>`
-    : `<div class="empty small">Nenhum ${p.type === 'W' ? 'semanalista' : 'mensalista'} ativo nesta data.</div>`}
-  </div>`;
+    : `<div class="empty small">Nenhum ${p.type === 'W' ? 'semanalista' : 'mensalista'} ativo nesta data.${otherType.length ? ` <span class="muted">(${otherType.length} funcionário(s) ${p.type === 'W' ? 'mensalista(s): escolha "Mensalistas" acima' : 'semanalista(s): escolha "Semanalistas" acima'})</span>` : ''}</div>`}
+  </div>${missingHint}`;
 }
 
 /* ---------- Eventos da tela ---------- */
