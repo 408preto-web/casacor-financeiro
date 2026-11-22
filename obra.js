@@ -24,7 +24,7 @@ const QR_CHOICES = [
 const QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
 const oui = { tab: 'cron', open: {}, envF: '' };
 
-const canObra = () => ['member', 'payer', 'admin'].includes(state.me?.role);
+const canObra = () => ['member', 'payer', 'admin'].includes(state.me?.role) && !ownOnly();
 const bySortStage = (a, b) => (a.sort - b.sort) || String(a.start_date || '9').localeCompare(String(b.start_date || '9')) || a.name.localeCompare(b.name);
 const stagesOf = (envId) => (state.obraStages || []).filter((s) => String(s.env_id) === String(envId)).sort(bySortStage);
 const milestones = () => (state.obraStages || []).filter((s) => s.env_id == null).sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')));

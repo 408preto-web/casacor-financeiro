@@ -16,7 +16,7 @@ const SERVICES = [
 const gui = { tab: 'op', date: '', env: '', q: '', peopleQ: '', report: null };
 
 const isGateOnly = () => state.me?.role === 'gate';
-const canGate = () => ['gate', 'member', 'payer', 'admin'].includes(state.me?.role);
+const canGate = () => ['gate', 'member', 'payer', 'admin'].includes(state.me?.role) && !ownOnly();
 const gPerson = (id) => state.gatePeople?.find((p) => p.id === id);
 const gEnv = (id) => state.gateEnvs?.find((e) => String(e.id) === String(id));
 const envLabel = (e) => (e ? `${e.number ? e.number + ' · ' : ''}${e.name}${e.architect ? ' — ' + e.architect : ''}` : 'Sem ambiente');

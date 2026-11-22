@@ -130,6 +130,9 @@ const unitChecks = (name, selected) => `<div class="unit-checks">${myUnits().map
 const ui = { view: 'painel', tab: 'pending', filter: { q: '', area: '', who: '', method: '', month: '', edition: '' }, report: { edition: '', from: '', to: '' }, loading: false, offline: false };
 
 const isPayer = () => ['payer', 'admin'].includes(state.me?.role);
+/** Comprador restrito: vê só as contas que ele mesmo lançou (supabase-comprador-restrito.sql). */
+const ownOn = () => !!state.me && 'only_own' in state.me;
+const ownOnly = () => state.me?.role === 'member' && !!state.me.only_own;
 const isAdmin = () => state.me?.role === 'admin';
 const areaById = (id) => state.areas.find((a) => String(a.id) === String(id)) || { name: 'Sem área', color: '#94a3b8' };
 const memberName = (id) => { const m = state.members.find((x) => x.user_id === id); return m ? (m.name || m.email) : '—'; };
@@ -409,6 +412,8 @@ function render() {
   if (isGateOnly()) ui.view = 'portaria';
   $('.nav-item[data-view="rh"]').hidden = !isHR();
   $('.nav-item[data-view="obra"]').hidden = !canObra();
+  $('.nav-item[data-view="portaria"]').hidden = !canGate();
+  if (ui.view === 'portaria' && !canGate()) ui.view = 'painel';
   if (ui.view === 'obra' && !canObra()) ui.view = 'painel';
   const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, portaria: renderPortaria, obra: renderObra, equipe: renderEquipe, ajustes: renderAjustes };
   $('#view').innerHTML = views[ui.view]();
@@ -770,9 +775,9 @@ function renderEquipe() {
   const row = (m) => `<li class="member-row">
       <div class="avatar">${esc((m.name || '?').charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-title">${esc(m.name)}${m.user_id === state.me.user_id ? ' <span class="muted">(você)</span>' : ''}</div>
-        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}${unitsOn() && state.units.length > 1 ? ` · 📍 ${m.role === 'admin' && !state.unitStrict ? 'todas as franquias' : esc(unitNames(m.units)) || '—'}` : ''}</div>
+        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}${m.role === 'member' && m.only_own ? ' · <span class="badge">🙈 vê só o que lança</span>' : ''}${unitsOn() && state.units.length > 1 ? ` · 📍 ${m.role === 'admin' && !state.unitStrict ? 'todas as franquias' : esc(unitNames(m.units)) || '—'}` : ''}</div>
         ${isAdmin() && unitsOn() && myUnits().length > 1 && m.user_id !== state.me.user_id && (state.unitStrict || m.role !== 'admin') ? `<div class="unit-checks small">${myUnits().map((u) => `<label class="check"><input type="checkbox" data-munit="${m.user_id}" value="${u.code}" ${(m.units || []).includes(u.code) ? 'checked' : ''} ${canManage(m) ? '' : 'disabled'}><span>${esc(u.name)}</span></label>`).join('')}</div>` : ''}</div>
-      <div class="row-actions">${isAdmin() && canManage(m) ? `${roleSel(m)}${m.role !== 'admin' && 'can_hr' in m ? `<label class="check hr-toggle"><input type="checkbox" data-hr="${m.user_id}" ${m.can_hr ? 'checked' : ''}><span>Acesso ao RH</span></label>` : ''}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
+      <div class="row-actions">${isAdmin() && canManage(m) ? `${roleSel(m)}${m.role !== 'admin' && 'can_hr' in m ? `<label class="check hr-toggle"><input type="checkbox" data-hr="${m.user_id}" ${m.can_hr ? 'checked' : ''}><span>Acesso ao RH</span></label>` : ''}${m.role === 'member' && ownOn() ? `<label class="check hr-toggle"><input type="checkbox" data-own="${m.user_id}" ${m.only_own ? 'checked' : ''}><span>Vê só o que lança</span></label>` : ''}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
     </li>`;
   return `
   ${isAdmin() && pending.length ? `<div class="card attention"><h2>⏳ Aguardando sua aprovação</h2><ul class="tx-list">${pending.map((m) => `<li class="member-row">
@@ -872,6 +877,12 @@ function bindView() {
   else $$('[data-emp]', v).forEach((el) => el.addEventListener('click', () => openEmployee(el.dataset.emp)));
   $$('[data-genfolha]', v).forEach((b) => b.addEventListener('click', () => { const [t, d] = b.dataset.genfolha.split('|'); goToPayroll(t, d); }));
   if (ui.view === 'equipe') {
+    $$('[data-own]', v).forEach((c) => c.addEventListener('change', async () => {
+      try {
+        await api.update('members', `user_id=eq.${c.dataset.own}`, { only_own: c.checked });
+        toast(c.checked ? 'Agora vê só as contas que ele lança' : 'Agora vê todas as contas'); await loadAll({ quiet: true }); render();
+      } catch (e) { toast(e.message); render(); }
+    }));
     $$('[data-hr]', v).forEach((c) => c.addEventListener('change', async () => {
       try {
         await api.update('members', `user_id=eq.${c.dataset.hr}`, { can_hr: c.checked });
@@ -1319,13 +1330,14 @@ function openApprove(userId) {
     <div class="form-grid one">
       <label class="field"><span>Nome</span><input name="name" value="${esc(m.name)}" required></label>
       <label class="field"><span>Função</span><select name="role">
-        <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="admin">Administrador — tudo</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
+        <option value="member">Comprador — lança contas</option>${ownOn() ? '<option value="member_own">Comprador restrito — vê só o que ele lança</option>' : ''}<option value="payer">Pagador — lança e paga</option><option value="admin">Administrador — tudo</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
       <label class="field"><span>Área principal (sugerida ao lançar)</span><select name="area"><option value="">—</option>${state.areas.map((a) => `<option>${esc(a.name)}</option>`).join('')}</select></label>
       ${unitsOn() && state.units.length > 1 ? `<div class="field"><span>Franquias</span>${unitChecks('units', [state.unit])}</div>` : ''}
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Aprovar</button></div>`,
   async (action, fd) => {
     const data = { name: fd.get('name').trim(), role: fd.get('role'), area: fd.get('area') };
+    if (ownOn()) { data.only_own = data.role === 'member_own'; if (data.only_own) data.role = 'member'; }
     if (unitsOn() && state.units.length > 1) { data.units = fd.getAll('units'); if (!data.units.length) { toast('Marque pelo menos uma franquia'); return false; } }
     await api.update('members', `user_id=eq.${userId}`, data);
     toast('Acesso aprovado ✅'); await loadAll({ quiet: true }); render();
@@ -1338,13 +1350,14 @@ function openInviteForm() {
     <div class="form-grid one">
       <label class="field"><span>Nome</span><input name="name" required placeholder="Ex.: Amsterdã"></label>
       <label class="field"><span>Função</span><select name="role">
-        <option value="member">Comprador — lança contas</option><option value="payer">Pagador — lança e paga</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
+        <option value="member">Comprador — lança contas</option>${ownOn() ? '<option value="member_own">Comprador restrito — vê só o que ele lança</option>' : ''}<option value="payer">Pagador — lança e paga</option><option value="gate">Porteiro — só a portaria da obra</option></select></label>
       ${unitsOn() && state.units.length > 1 ? `<div class="field"><span>Franquias que a pessoa vai acessar</span>${unitChecks('units', [state.unit])}</div>` : ''}
       <p class="muted small" style="margin:0">Administrador e acesso ao RH você libera depois, aqui em Equipe.</p>
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Gerar convite</button></div>`,
   async (action, fd) => {
     const data = { name: fd.get('name').trim(), role: fd.get('role') };
+    if (ownOn()) { data.only_own = data.role === 'member_own'; if (data.only_own) data.role = 'member'; }
     if (unitsOn()) { data.units = state.units.length > 1 ? fd.getAll('units') : [state.unit]; if (!data.units.length) { toast('Marque pelo menos uma franquia'); return false; } }
     const [inv] = await api.insert('invites', data);
     await loadAll({ quiet: true }); render();
