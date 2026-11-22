@@ -75,7 +75,11 @@ const state = { me: null, members: [], areas: [], cards: [], settings: { edition
 /* ---------- Franquias (Ceará, Piauí…) ---------- */
 const UNIT_KEY = 'casacor:unit';
 const unitsOn = () => Array.isArray(state.me?.units) && (state.units || []).length > 0; // banco já tem franquias
-const myUnits = () => (!unitsOn() ? [] : state.me.role === 'admin' ? state.units : state.units.filter((u) => state.me.units.includes(u.code)));
+const myUnits = () => (!unitsOn() ? [] : state.me.role === 'admin' && !state.unitStrict ? state.units : state.units.filter((u) => state.me.units.includes(u.code)));
+/** Administração geral: administrador com todas as franquias (vê e muda todo mundo). */
+const isSuper = () => state.me?.role === 'admin' && (!state.unitStrict || (state.units || []).every((u) => (state.me.units || []).includes(u.code)));
+/** Pode mudar função/franquias desta pessoa? (administrador só dentro das próprias franquias) */
+const canManage = (m) => isAdmin() && (isSuper() || m.role === 'pending' || (m.units || []).every((c) => myUnits().some((u) => u.code === c)));
 const unitName = (code = state.unit) => (state.units || []).find((u) => u.code === code)?.name || (code === 'pi' ? 'Piauí' : 'Ceará');
 const unitNames = (codes) => (codes || []).map((c) => unitName(c)).join(' e ');
 function pickUnit() {
@@ -122,7 +126,7 @@ function openUnitPicker() {
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Fechar</button></div>`, () => {},
   () => $$('[data-unitpick]', modalForm).forEach((b) => b.addEventListener('click', () => { modal.close(); switchUnit(b.dataset.unitpick); })));
 }
-const unitChecks = (name, selected) => `<div class="unit-checks">${state.units.map((u) => `<label class="check"><input type="checkbox" name="${name}" value="${u.code}" ${selected.includes(u.code) ? 'checked' : ''}><span>${esc(u.name)}</span></label>`).join('')}</div>`;
+const unitChecks = (name, selected) => `<div class="unit-checks">${myUnits().map((u) => `<label class="check"><input type="checkbox" name="${name}" value="${u.code}" ${selected.includes(u.code) ? 'checked' : ''}><span>${esc(u.name)}</span></label>`).join('')}</div>`;
 const ui = { view: 'painel', tab: 'pending', filter: { q: '', area: '', who: '', method: '', month: '', edition: '' }, report: { edition: '', from: '', to: '' }, loading: false, offline: false };
 
 const isPayer = () => ['payer', 'admin'].includes(state.me?.role);
@@ -155,10 +159,12 @@ async function loadAll({ quiet = false } = {}) {
   if (ui.loading && Date.now() - (ui.loadingSince || 0) < 60000) return; // trava de segurança: nunca fica preso "atualizando"
   ui.loading = true; ui.loadingSince = Date.now(); updatePill();
   try {
-    const [members, units] = await Promise.all([
+    const [members, units, strict] = await Promise.all([
       api.select('members', 'select=*&order=name'),
       api.select('units', 'select=*&order=sort').catch(() => []),
+      api.rpc('my_units', {}).catch(() => null), // existe depois do supabase-admin-franquia.sql
     ]);
+    state.unitStrict = Array.isArray(strict);
     const me0 = members.find((m) => m.user_id === api.session().user.id);
     if (me0) state.me = me0;
     state.units = units || [];
@@ -764,9 +770,9 @@ function renderEquipe() {
   const row = (m) => `<li class="member-row">
       <div class="avatar">${esc((m.name || '?').charAt(0).toUpperCase())}</div>
       <div class="tx-main"><div class="tx-title">${esc(m.name)}${m.user_id === state.me.user_id ? ' <span class="muted">(você)</span>' : ''}</div>
-        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}${unitsOn() && state.units.length > 1 ? ` · 📍 ${m.role === 'admin' ? 'todas as franquias' : esc(unitNames(m.units)) || '—'}` : ''}</div>
-        ${isAdmin() && unitsOn() && state.units.length > 1 && m.role !== 'admin' ? `<div class="unit-checks small">${state.units.map((u) => `<label class="check"><input type="checkbox" data-munit="${m.user_id}" value="${u.code}" ${(m.units || []).includes(u.code) ? 'checked' : ''}><span>${esc(u.name)}</span></label>`).join('')}</div>` : ''}</div>
-      <div class="row-actions">${isAdmin() ? `${roleSel(m)}${m.role !== 'admin' && 'can_hr' in m ? `<label class="check hr-toggle"><input type="checkbox" data-hr="${m.user_id}" ${m.can_hr ? 'checked' : ''}><span>Acesso ao RH</span></label>` : ''}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
+        <div class="tx-meta">${esc(m.email)}${m.area ? ' · ' + esc(m.area) : ''}${m.role === 'admin' || m.can_hr ? ' · <span class="badge open">🔒 RH</span>' : ''}${unitsOn() && state.units.length > 1 ? ` · 📍 ${m.role === 'admin' && !state.unitStrict ? 'todas as franquias' : esc(unitNames(m.units)) || '—'}` : ''}</div>
+        ${isAdmin() && unitsOn() && myUnits().length > 1 && m.user_id !== state.me.user_id && (state.unitStrict || m.role !== 'admin') ? `<div class="unit-checks small">${myUnits().map((u) => `<label class="check"><input type="checkbox" data-munit="${m.user_id}" value="${u.code}" ${(m.units || []).includes(u.code) ? 'checked' : ''} ${canManage(m) ? '' : 'disabled'}><span>${esc(u.name)}</span></label>`).join('')}</div>` : ''}</div>
+      <div class="row-actions">${isAdmin() && canManage(m) ? `${roleSel(m)}${m.role !== 'admin' && 'can_hr' in m ? `<label class="check hr-toggle"><input type="checkbox" data-hr="${m.user_id}" ${m.can_hr ? 'checked' : ''}><span>Acesso ao RH</span></label>` : ''}<button class="btn small" data-editmember="${m.user_id}">Editar</button>` : `<span class="badge open">${ROLES[m.role].label}</span>`}</div>
     </li>`;
   return `
   ${isAdmin() && pending.length ? `<div class="card attention"><h2>⏳ Aguardando sua aprovação</h2><ul class="tx-list">${pending.map((m) => `<li class="member-row">
@@ -778,7 +784,7 @@ function renderEquipe() {
     <h2>Equipe</h2>
     <ul class="tx-list">${active.map(row).join('')}</ul>
     <div class="role-help muted small">
-      <b>Comprador:</b> lança contas e acompanha tudo. · <b>Pagador:</b> também marca contas como pagas. · <b>Administrador:</b> também aprova pessoas e altera configurações.
+      <b>Comprador:</b> lança contas e acompanha tudo. · <b>Pagador:</b> também marca contas como pagas. · <b>Administrador:</b> também aprova pessoas e altera configurações — <b>só nas franquias marcadas para ele</b> (ex.: administrador só do Piauí).
       <br><b>🔒 Acesso ao RH:</b> vê funcionários, salários e a folha (o administrador sempre tem).
     </div>
   </div>

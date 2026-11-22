@@ -62,8 +62,10 @@ fica no **Ceará**; o **Piauí** começa vazio, com as mesmas áreas. Contas, ca
 são separados por franquia — o próprio banco só mostra as franquias liberadas para cada pessoa.
 
 - **Trocar de franquia:** toque em **📍 Ceará ▾** no topo (ou no nome ao lado da logo, no menu).
-- **Quem vê o quê:** administradores veem todas; para os outros, marque **Ceará / Piauí** em **Equipe**.
-  Convites e aprovações já perguntam a franquia.
+- **Quem vê o quê:** cada pessoa vê só as franquias marcadas em **Equipe** — inclusive administradores, depois de rodar
+  [`supabase-admin-franquia.sql`](supabase-admin-franquia.sql) (ex.: sócios do Piauí = administradores só do Piauí, sem ver
+  nada do Ceará). Quem administra todas as franquias é a administração geral e vê tudo. Convites e aprovações já
+  perguntam a franquia.
 
 ## 🏗️ Obra — cronograma e QR Code
 
