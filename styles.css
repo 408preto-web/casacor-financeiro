@@ -782,3 +782,15 @@ button.chip { cursor: pointer; }
 .ar-cls li { display: grid; grid-template-columns: 1fr minmax(160px, 45%); gap: 8px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 @media (max-width: 600px) { .ar-cls li { grid-template-columns: 1fr; } }
 .no-areas { background: color-mix(in srgb, var(--warn) 14%, transparent); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* Estoque */
+.st-actions { flex-wrap: wrap; }
+.st-bal { font-size: 20px; font-weight: 800; }
+.st-count { display: grid; gap: 6px; max-height: 45vh; overflow: auto; margin-bottom: 8px; }
+.st-count-row { display: grid; grid-template-columns: 1fr 110px 54px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.st-count-row small { display: block; color: var(--muted); font-size: 12px; }
+.st-count-row em { font-style: normal; color: var(--muted); font-size: 13px; }
+.st-new { display: grid; gap: 6px; margin-bottom: 8px; }
+.st-new-row { display: grid; grid-template-columns: minmax(140px, 2fr) 90px 100px minmax(90px, 1fr); gap: 6px; }
+.bi-row { grid-template-columns: minmax(140px, 2fr) 90px 110px; }
+@media (max-width: 600px) { .st-new-row { grid-template-columns: 1fr 80px 96px; } .st-new-row > input:last-child:not([name^=bi]) { grid-column: 1 / -1; } .bi-row { grid-template-columns: 1fr 1fr; } .bi-row > input:first-child { grid-column: 1 / -1; } }

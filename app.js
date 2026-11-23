@@ -112,7 +112,7 @@ function switchUnit(code) {
   if (code === state.unit) return;
   state.unit = code; applyUnit();
   // limpa os dados da franquia anterior enquanto carrega a nova
-  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], obraStages: [], obraUpdates: [], settings: { edition: '' }, otherDue: [] });
+  Object.assign(state, { areas: [], cards: [], bills: [], employees: [], hrEvents: [], gateEnvs: [], gatePeople: [], gateEntries: [], obraStages: [], obraUpdates: [], stockItems: state.stockItems ? [] : null, stockMoves: [], settings: { edition: '' }, otherDue: [] });
   ui.filter = { q: '', area: '', who: '', method: '', month: '', edition: '' }; ui.report = { edition: '', from: '', to: '' };
   if (isGateOnly()) ui.view = 'portaria';
   render(); toast(`Agora: CASACOR ${unitName(code)}`);
@@ -183,6 +183,7 @@ async function loadAll({ quiet = false } = {}) {
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
     await loadGate(); // portaria da obra (portaria.js)
     await loadObra(); // cronograma da obra (obra.js)
+    await loadStock(); // estoque (estoque.js)
     state.invites = me?.role === 'admin' ? await api.select('invites', 'select=*&used_at=is.null&order=created_at.desc').catch(() => null) : null;
     await loadOtherUnitsDue();
     ui.offline = false;
@@ -390,7 +391,7 @@ async function boot() {
 }
 
 /* ---------- Navegação ---------- */
-const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', portaria: 'Portaria da obra', obra: 'Obra — cronograma', equipe: 'Equipe', ajustes: 'Ajustes' };
+const TITLES = { painel: 'Painel', contas: 'Contas', cartoes: 'Cartões da empresa', relatorios: 'Relatórios', rh: 'RH — Pessoal', portaria: 'Portaria da obra', obra: 'Obra — cronograma', estoque: 'Estoque', equipe: 'Equipe', ajustes: 'Ajustes' };
 function setView(v) {
   ui.view = v;
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
@@ -413,9 +414,11 @@ function render() {
   $('.nav-item[data-view="rh"]').hidden = !isHR();
   $('.nav-item[data-view="obra"]').hidden = !canObra();
   $('.nav-item[data-view="portaria"]').hidden = !canGate();
+  $('.nav-item[data-view="estoque"]').hidden = !canStock();
+  if (ui.view === 'estoque' && !canStock()) ui.view = 'painel';
   if (ui.view === 'portaria' && !canGate()) ui.view = 'painel';
   if (ui.view === 'obra' && !canObra()) ui.view = 'painel';
-  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, portaria: renderPortaria, obra: renderObra, equipe: renderEquipe, ajustes: renderAjustes };
+  const views = { painel: renderPainel, contas: renderContas, cartoes: renderCartoes, relatorios: renderRelatorios, rh: renderRH, portaria: renderPortaria, obra: renderObra, estoque: renderEstoque, equipe: renderEquipe, ajustes: renderAjustes };
   $('#view').innerHTML = views[ui.view]();
   bindView();
   updateBadges(); updatePill();
@@ -876,6 +879,7 @@ function bindView() {
   }
   if (ui.view === 'portaria') bindPortaria(v);
   if (ui.view === 'obra') bindObra(v);
+  if (ui.view === 'estoque') bindEstoque(v);
   if (ui.view === 'rh') bindRH(v);
   else $$('[data-emp]', v).forEach((el) => el.addEventListener('click', () => openEmployee(el.dataset.emp)));
   $$('[data-genfolha]', v).forEach((b) => b.addEventListener('click', () => { const [t, d] = b.dataset.genfolha.split('|'); goToPayroll(t, d); }));
@@ -1010,6 +1014,7 @@ function openBillForm(bill, defaults = {}) {
       <label class="field ${catsOn() ? '' : 'full'}"><span>Área *</span><select name="area_id" required><option value="">Escolha…</option>${state.areas.filter((a) => a.active || String(a.id) === String(b.area_id)).map((a) => `<option value="${a.id}" ${String(a.id) === String(b.area_id) ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
       ${catsOn() ? `<label class="field"><span>Categoria *</span><select name="category" id="bCat" ${b.area_id ? '' : 'disabled'}>${catOptions(b.area_id, b.category)}</select></label>` : ''}
       <label class="field full"><span>Descrição ${catsOn() ? '(detalhe, opcional)' : '(o que está pagando)'}</span><input name="description" value="${esc(b.description)}" placeholder="Ex.: convites da abertura, tinta do ambiente 3, salário de março…"></label>
+      ${billItemsField(b.items || [])}
       <label class="field"><span>Valor (R$) *</span><input class="amount-input" name="amount" inputmode="decimal" placeholder="0,00" value="${b.cents ? centsToInput(b.cents) : ''}" required autocomplete="off"></label>
       <label class="field"><span>Data da compra</span><input type="date" name="purchase_date" value="${b.purchase_date}" required></label>
       <label class="field"><span>Edição</span><input name="edition" value="${esc(b.edition)}" inputmode="numeric" placeholder="Ex.: 2027"></label>
@@ -1066,6 +1071,8 @@ function openBillForm(bill, defaults = {}) {
       base.category = fd.get('category') === '__new' ? '' : fd.get('category') || '';
       if (!base.category && areaCats(base.area_id).length) { toast('Escolha a categoria (o que é)'); return false; }
     }
+    const items = await readBillItems(fd, areaById(base.area_id).name); // itens para o estoque (estoque.js)
+    if (items) base.items = items;
     const id = isEdit ? bill.id : uuid();
     const groupId = n > 1 ? uuid() : null;
     const folder = groupId || id;
@@ -1084,7 +1091,7 @@ function openBillForm(bill, defaults = {}) {
     } else {
       const per = Math.floor(cents / n), rest = cents - per * n;
       const rows = Array.from({ length: n }, (_, i) => ({
-        ...base, id: i === 0 ? id : uuid(), group_id: groupId,
+        ...base, id: i === 0 ? id : uuid(), group_id: groupId, ...(base.items ? { items: i === 0 ? base.items : [] } : {}),
         amount: (per + (i === 0 ? rest : 0)) / 100,
         due_date: installmentDue(i, { card, purchase, due, interval: fd.get('interval') }),
         installment: n > 1 ? `${i + 1}/${n}` : '', attachments,
@@ -1102,6 +1109,7 @@ function openBillForm(bill, defaults = {}) {
       const v = (n) => $(`[name="${n}"]`, modalForm)?.value || '';
       openBillForm(null, { supplier: v('supplier'), description: v('description'), cents: parseMoney(v('amount')) });
     });
+    bindBillItems();
     const catSel = $('#bCat');
     $('[name="area_id"]', modalForm)?.addEventListener('change', (e) => { if (catSel) { catSel.disabled = !e.target.value; catSel.innerHTML = catOptions(e.target.value, ''); } });
     let lastCat = catSel?.value || '';
@@ -1178,6 +1186,7 @@ function openBill(id) {
     <div class="detail-head"><div><h2 style="margin:0">${esc(b.supplier)}</h2><div class="muted">${esc(b.description || '')}</div></div>
       <div class="detail-amount">${money(b.cents)} ${statusBadge(b)}</div></div>
     <dl class="detail">
+      ${billItemsText(b) ? `<dt>Itens</dt><dd>📦 ${esc(billItemsText(b))} ${b.status === 'paid' ? '<span class="badge paid">entrou no estoque</span>' : '<span class="muted small">(entram no estoque quando a conta for paga)</span>'}</dd>` : ''}
       <dt>Área</dt><dd><span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}${b.category ? ' › <b>' + esc(b.category) + '</b>' : ''}${b.edition ? ` · edição ${esc(b.edition)}` : ''}</dd>
       <dt>Lançada por</dt><dd>${esc(memberName(b.created_by))} · ${new Date(b.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</dd>
       <dt>Data da compra</dt><dd>${fmtDate(b.purchase_date)}</dd>

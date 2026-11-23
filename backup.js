@@ -49,6 +49,7 @@ async function makeBackup() {
       fetchAll('gate_people', 'name'), fetchAll('gate_entries', 'entered_at'), fetchAll('obra_stages', 'sort'),
       fetchAll('obra_updates', 'created_at'), fetchAll('settings'),
     ]);
+    const [stItems, stMoves] = await Promise.all([fetchAll('stock_items', 'name'), fetchAll('stock_moves', 'date')]);
     const un = (c) => (unitsOn() ? unitName(c) : '');
     const aName = (id) => areas.find((a) => String(a.id) === String(id))?.name || '';
     const cName = (id) => { const c = cards.find((x) => x.id === id); return c ? cardLabel(c) : ''; };
@@ -84,6 +85,8 @@ async function makeBackup() {
         Situação: STAGE_STATUS?.[s.status]?.label || s.status, '%': num(s.progress), 'Atualizado por': s.updated_by, 'Atualizado em': dt(s.updated_at) }))],
       ['Obra - atualizações', updates.map((u) => ({ Franquia: un(u.unit), Ambiente: envName(u.env_id), Etapa: sName(u.stage_id), Quando: dt(u.created_at), Quem: u.author,
         Situação: STAGE_STATUS?.[u.status]?.label || u.status, '%': num(u.progress), Observação: u.note, Fotos: (u.photos || []).length || '', Via: u.via === 'app' ? 'sistema' : 'QR Code' }))],
+      ['Estoque - itens', stItems.map((i) => ({ Franquia: un(i.unit), Item: i.name, Grupo: i.grp, Medida: i.measure, Mínimo: num(i.min_qty), Ativo: i.active ? 'sim' : 'não' }))],
+      ['Estoque - movimentos', stMoves.map((m) => ({ Franquia: un(m.unit), Data: d(m.date), Item: stItems.find((i) => i.id === m.item_id)?.name || '', Tipo: { in: 'Entrada', out: 'Saída', count: 'Contagem' }[m.kind], Quantidade: num(m.qty), 'Para onde': m.dest, Observação: m.note, 'Da compra': m.bill_id ? 'sim' : '' }))],
       ['Configurações', settings.map((s) => ({ Franquia: un(s.unit), 'Edição atual': s.edition }))],
     ];
     const wb = XLSX.utils.book_new();

@@ -105,7 +105,7 @@ const api = {
   },
   // Franquia atual (Ceará, Piauí…): as tabelas separadas por franquia são filtradas e gravadas com ela.
   unit: null,
-  unitTables: new Set(['areas', 'cards', 'settings', 'bills', 'employees', 'hr_events', 'gate_envs', 'gate_people', 'gate_entries', 'obra_stages', 'obra_updates']),
+  unitTables: new Set(['areas', 'cards', 'settings', 'bills', 'employees', 'hr_events', 'gate_envs', 'gate_people', 'gate_entries', 'obra_stages', 'obra_updates', 'stock_items', 'stock_moves']),
   withUnit(table, q) {
     if (!this.unit || !this.unitTables.has(table) || /(^|&)unit=/.test(q)) return q;
     return `${q ? q + '&' : ''}unit=eq.${encodeURIComponent(this.unit)}`;

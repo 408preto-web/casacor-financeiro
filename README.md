@@ -101,6 +101,17 @@ Envia o PDF pelo WhatsApp, imprime ou exporta para Excel.
 **Cópia de segurança:** em **Ajustes → 💾 Cópia de segurança** (só administradores) baixa uma planilha Excel com
 todos os dados de todas as franquias, uma aba por assunto. O Painel lembra quando passar 30 dias sem cópia.
 
+## 📦 Estoque
+
+Ative rodando [`supabase-estoque.sql`](supabase-estoque.sql) no SQL Editor. Por franquia; só quantidades (sem valores),
+então compradores também usam.
+
+- **Levantamento:** escreve cada material e a quantidade contada (ex.: Cabo 2 mm — 1.000 m). A contagem define o saldo.
+- **Compra com itens:** ao lançar a conta, informe os itens e as quantidades. Eles aparecem como **a chegar** e
+  **entram no estoque sozinhos quando a conta é marcada como paga** (saem de novo se o pagamento for desfeito).
+- **Saída:** quanto saiu e para onde (ambiente, obra, evento). **Entrada** manual para doações/devoluções.
+- Histórico por item, aviso de estoque baixo (mínimo por item) e planilha Excel.
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -133,3 +144,4 @@ todos os dados de todas as franquias, uma aba por assunto. O Painel lembra quand
 | `obra.js`, `supabase-obra.sql` | Obra: cronograma, QR Code por ambiente e atualizações |
 | `relatorio-area.js`, `supabase-categorias.sql` | Categorias por área e relatório de gastos por área |
 | `backup.js` | Cópia de segurança em planilha Excel |
+| `estoque.js`, `supabase-estoque.sql` | Estoque: levantamento, compras que entram ao pagar, saídas |
