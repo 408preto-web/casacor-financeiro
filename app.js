@@ -1439,7 +1439,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   let reloading = false;
   const reloadWhenIdle = () => {
     if (reloading) return;
-    if (modal.open || document.activeElement?.matches?.('input, textarea, select')) return setTimeout(reloadWhenIdle, 5000);
+    if (modal.open || window.__sharing || document.activeElement?.matches?.('input, textarea, select')) return setTimeout(reloadWhenIdle, 5000);
     reloading = true; location.reload();
   };
   navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) reloadWhenIdle(); });

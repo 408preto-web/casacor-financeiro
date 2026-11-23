@@ -219,16 +219,25 @@ async function attachReceiptTo(c, files, info) {
 }
 
 /* ---------- Compartilhado pelo Android (share_target) ---------- */
+let sharedBusy = false;
 async function takeSharedFiles() {
-  if (!new URLSearchParams(location.search).has('compartilhado')) return;
-  history.replaceState(null, '', location.pathname);
+  // Não depende só do endereço: se o app recarregar no meio (ex.: atualização), o comprovante continua guardado.
+  if (sharedBusy) return;
+  if (new URLSearchParams(location.search).has('compartilhado')) history.replaceState(null, '', location.pathname);
   try {
     const c = await caches.open('casacor-share'); const keys = await c.keys(); const files = [];
     for (const k of keys) {
+      const ts = Number((k.url.match(/shared\/(\d+)-/) || [])[1]) || 0;
+      if (ts && Date.now() - ts > 30 * 60000) { await c.delete(k); continue; } // esquecido há mais de 30 min
       const r = await c.match(k); const blob = await r.blob();
       files.push(new File([blob], decodeURIComponent(r.headers.get('x-name') || 'comprovante'), { type: blob.type }));
-      await c.delete(k);
     }
-    if (files.length) openReceiptFlow(files);
-  } catch { toast('Não consegui abrir o arquivo compartilhado'); }
+    if (!files.length) return;
+    sharedBusy = true; window.__sharing = true;
+    const clear = async () => { for (const k of keys) await c.delete(k).catch(() => {}); sharedBusy = false; window.__sharing = false; };
+    openReceiptFlow(files);
+    // apaga só quando terminar (anexou, pagou ou cancelou)
+    const onClose = () => setTimeout(() => { if (!modal.open) { modal.removeEventListener('close', onClose); clear(); } }, 400);
+    modal.addEventListener('close', onClose);
+  } catch { sharedBusy = false; window.__sharing = false; toast('Não consegui abrir o arquivo compartilhado'); }
 }
