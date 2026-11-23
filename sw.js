@@ -1,5 +1,5 @@
 // Service worker: guarda os arquivos do app para abrir rápido e funcionar com internet instável.
-const CACHE = 'casacor-pagamentos-v33';
+const CACHE = 'casacor-pagamentos-v34';
 const ASSETS = ['./', 'index.html', 'styles.css', 'config.js', 'api.js', 'rh.js', 'rh-relatorio.js', 'relatorio-area.js', 'portaria.js', 'obra.js', 'estoque.js', 'comprovante.js', 'backup.js', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/casacor.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 

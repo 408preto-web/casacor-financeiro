@@ -794,3 +794,6 @@ button.chip { cursor: pointer; }
 .st-new-row { display: grid; grid-template-columns: minmax(140px, 2fr) 90px 100px minmax(90px, 1fr); gap: 6px; }
 .bi-row { grid-template-columns: minmax(140px, 2fr) 90px 110px; }
 @media (max-width: 600px) { .st-new-row { grid-template-columns: 1fr 80px 96px; } .st-new-row > input:last-child:not([name^=bi]) { grid-column: 1 / -1; } .bi-row { grid-template-columns: 1fr 1fr; } .bi-row > input:first-child { grid-column: 1 / -1; } }
+.rc-new { display: grid; gap: 8px; padding: 12px; border-radius: 12px; border: 2px dashed color-mix(in srgb, var(--primary) 45%, var(--border)); margin-bottom: 10px; }
+.rc-new .btn { justify-self: start; }
+.btn.rc-new-link { width: 100%; margin-bottom: 8px; }

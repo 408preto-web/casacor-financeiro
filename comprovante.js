@@ -34,7 +34,7 @@ async function pdfText(file, progress) {
   let text = '';
   for (let i = 1; i <= Math.min(doc.numPages, 3); i++) {
     const c = await (await doc.getPage(i)).getTextContent();
-    text += c.items.map((x) => x.str).join(' ') + '\n';
+    text += c.items.map((x) => x.str + (x.hasEOL ? '\n' : ' ')).join('') + '\n';
   }
   if (text.replace(/\s/g, '').length > 30) return text;
   // PDF escaneado (só imagem): desenha a 1ª página e lê como foto
@@ -65,8 +65,29 @@ function parseReceipt(text) {
   for (const m of t.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)) dates.add(`${m[3]}-${m[2]}-${m[1]}`);
   for (const m of t.matchAll(/(\d{1,2})\s*(?:de\s+)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:de\s+)?(\d{4})/g)) dates.add(`${m[3]}-${String(MONTHS_PT[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`);
   const validDates = [...dates].filter((d) => !Number.isNaN(Date.parse(d)) && d >= '2020-01-01' && d <= addDaysISO(todayISO(), 2)).sort().reverse();
-  return { text: t, digits: t.replace(/\D/g, ''), amounts, dates: validDates };
+  return { text: t, raw: String(text || ''), digits: t.replace(/\D/g, ''), amounts, dates: validDates, payee: extractPayee(text), pix: /\bpix\b/.test(t) };
 }
+
+/** Nome de quem recebeu (destino / favorecido / para…), para virar o fornecedor. */
+function extractPayee(text) {
+  const raw = String(text || '').replace(/\r/g, '');
+  const stop = /^(cpf|cnpj|chave|institui|banco|ag[eê]ncia|conta|valor|data|tipo|id|autentica|c[oó]digo|documento|\*|r\$)/i;
+  const clean = (s) => s.replace(/^(nome|raz[aã]o social)\s*:?\s*/i, '').replace(/\s+(cpf|cnpj|chave|institui[cç][aã]o|banco)\b.*$/i, '').replace(/[•*]+/g, '').trim();
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const head = /^(destino|para|favorecido|recebedor|benefici[aá]rio|quem recebeu|dados do recebedor|pago a|transferido para|enviado para)\b/i;
+  for (let i = 0; i < lines.length; i++) {
+    if (!head.test(lines[i])) continue;
+    const same = clean(lines[i].replace(head, '').replace(/^\s*:?\s*/, ''));
+    if (same.length >= 3 && /[a-zà-ú]{2}/i.test(same) && !stop.test(same)) return titleName(same);
+    for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
+      const c = clean(lines[j]);
+      if (c.length >= 3 && /[a-zà-ú]{3}/i.test(c) && !stop.test(c) && !head.test(c)) return titleName(c);
+    }
+  }
+  const m = raw.replace(/\s+/g, ' ').match(/(?:destino|favorecido|recebedor|benefici[aá]rio|para)\s*:?\s*(?:nome\s*:?\s*)?([A-ZÀ-Úa-zà-ú][A-ZÀ-Úa-zà-ú0-9.&' -]{2,60}?)(?=\s+(?:cpf|cnpj|chave|institui|banco|ag[eê]ncia|conta|valor|data)\b|$)/i);
+  return m ? titleName(clean(m[1])) : '';
+}
+const titleName = (s) => (s === s.toUpperCase() ? s.toLowerCase().replace(/(^|\s)(\S)/g, (x, a, b) => a + b.toUpperCase()).replace(/\s(D[aeo]s?|E|Ltda|Me|S\/a)\b/gi, (x) => (/ltda|me|s\/a/i.test(x) ? x.toUpperCase() : x.toLowerCase())) : s).slice(0, 80);
 
 const daysBetween = (a, b) => Math.abs((Date.parse(a) - Date.parse(b)) / 864e5);
 
@@ -168,11 +189,14 @@ function pickBillForReceipt(files, info, failed = '', q = '') {
     <div class="rc-found">${failed ? `⚠️ ${esc(failed)}. Escolha a conta abaixo.`
       : found ? `No comprovante: ${info.amounts.slice(0, 3).map((a) => `<b>${money(a.cents)}</b>`).join(', ')}${info.dates[0] ? ` · ${fmtDate(info.dates[0])}` : ''}`
       : 'Não consegui ler o valor desse arquivo. Escolha a conta abaixo.'}</div>
-    ${!nq && found && !ranked.length ? '<p class="muted small">Nenhuma conta com esse valor. Veja as contas a pagar ou procure abaixo.</p>' : ''}
+    ${!nq && !ranked.length ? `<div class="rc-new"><b>Não achei essa conta no sistema.</b> <span class="muted">Quer lançar agora, já como paga, com este comprovante?</span>
+      <button type="button" class="btn primary" id="rcNew">➕ Lançar esta conta agora</button></div>` : ''}
     <ul class="rc-list">${list.map(row).join('') || '<li class="muted">Nenhuma conta encontrada.</li>'}</ul>
     <label class="field"><span>Procurar outra conta</span><input id="rcQ" value="${esc(q)}" placeholder="Fornecedor, descrição ou valor" autocomplete="off"></label>
+    ${ranked.length || nq ? '<button type="button" class="btn rc-new-link" id="rcNew">➕ Não está na lista — lançar como nova conta paga</button>' : ''}
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button></div>`,
   () => false, () => {
+    $('#rcNew')?.addEventListener('click', () => openNewPaidBill(files, info));
     $$('[data-rcbill]', modalForm).forEach((el) => el.addEventListener('click', () => attachReceiptTo(cmap.get(el.dataset.rcbill), files, info)));
     const inp = $('#rcQ'); let t;
     inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { const v = inp.value; pickBillForReceipt(files, info, failed, v); const n = $('#rcQ'); n.focus(); n.setSelectionRange(v.length, v.length); }, 250); });
@@ -215,6 +239,75 @@ async function attachReceiptTo(c, files, info) {
     const rows = await api.update('bills', `id=eq.${b.id}`, { attachments: [...b.attachments, ...receipts] });
     if (!rows?.length) throw new Error('Não foi possível anexar (permissão).');
     toast('Comprovante anexado ✅'); await loadAll({ quiet: true }); render();
+  });
+}
+
+/* ---------- Conta que não estava no sistema: lança já paga, com o comprovante ---------- */
+async function openNewPaidBill(files, info) {
+  const units = typeof myUnits === 'function' && unitsOn() ? myUnits() : [];
+  let unit = state.unit; let areas = state.areas;
+  const amount = info.amounts.find((a) => a.strong)?.cents ?? info.amounts[0]?.cents ?? 0;
+  const date = info.dates.find((d) => d <= todayISO()) || todayISO();
+  const catOpts = (areaId, cur = '') => {
+    const cats = areas.find((a) => String(a.id) === String(areaId))?.categories || [];
+    if (!areaId) return '<option value="">Escolha a área primeiro</option>';
+    return `<option value="">${cats.length ? 'Escolha…' : '— (sem categorias)'}</option>${cats.map((c) => `<option ${c === cur ? 'selected' : ''}>${esc(c)}</option>`).join('')}<option value="__new">➕ Criar categoria…</option>`;
+  };
+  const areaOpts = () => `<option value="">Escolha…</option>${areas.filter((a) => a.active).map((a) => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}`;
+  const payers = state.members.filter((m) => ['payer', 'admin'].includes(m.role));
+  openModal(`<h2>➕ Lançar conta paga</h2>
+    <p class="muted" style="margin-top:-6px">Preenchido com o que li no comprovante. Confira e escolha a área e a categoria.</p>
+    <div class="form-grid">
+      ${units.length > 1 ? `<label class="field full"><span>Franquia</span><select name="unit">${units.map((u) => `<option value="${u.code}" ${u.code === unit ? 'selected' : ''}>CASACOR ${esc(u.name)}</option>`).join('')}</select></label>` : ''}
+      <label class="field full"><span>Fornecedor (quem recebeu) *</span><input name="supplier" value="${esc(info.payee || '')}" required placeholder="Ex.: Depósito São José" autocomplete="off"></label>
+      <label class="field"><span>Área *</span><select name="area_id" required>${areaOpts()}</select></label>
+      <label class="field"><span>Categoria *</span><select name="category" disabled>${catOpts('')}</select></label>
+      <label class="field full"><span>Descrição (opcional)</span><input name="description" placeholder="Ex.: areia e cimento para o contrapiso"></label>
+      <label class="field"><span>Valor pago (R$) *</span><input class="amount-input" name="amount" inputmode="decimal" value="${amount ? centsToInput(amount) : ''}" required></label>
+      <label class="field"><span>Data do pagamento *</span><input type="date" name="paid_at" value="${date}" required></label>
+      <label class="field"><span>Forma</span><select name="method">${['pix', 'transferencia', 'boleto', 'dinheiro'].map((m) => `<option value="${m}" ${(info.pix ? 'pix' : 'transferencia') === m ? 'selected' : ''}>${METHODS[m].label}</option>`).join('')}</select></label>
+      <label class="field"><span>Pago por</span><select name="paid_by">${payers.map((p) => `<option value="${p.user_id}" ${p.user_id === state.me.user_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+      <div class="field full"><span>Comprovante</span><div class="rc-attached">📎 ${files.map((f) => esc(f.name)).join(', ')}</div></div>
+    </div>
+    <div class="modal-actions"><button type="button" class="btn" id="rcBack">⬅️ Voltar à lista</button><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Lançar como paga</button></div>`,
+  async (action, fd) => {
+    const cents = parseMoney(fd.get('amount')); const areaId = fd.get('area_id'); const cat = fd.get('category') === '__new' ? '' : fd.get('category') || '';
+    const a = areas.find((x) => String(x.id) === String(areaId));
+    if (!fd.get('supplier').trim() || !areaId) { toast('Preencha fornecedor e área'); return false; }
+    if (!cat && (a?.categories || []).length) { toast('Escolha a categoria'); return false; }
+    if (cents <= 0) { toast('Informe o valor pago'); return false; }
+    const paidAt = fd.get('paid_at');
+    const receipts = await uploadFiles(files, `pagamentos/${uuid()}`, 'comprovante');
+    const editionRow = unit === state.unit ? state.settings : (await api.select('settings', `select=*&unit=eq.${unit}`).catch(() => []))[0];
+    const row = { unit, supplier: fd.get('supplier').trim(), description: fd.get('description').trim(), area_id: Number(areaId), category: cat,
+      amount: cents / 100, purchase_date: paidAt, due_date: paidAt, method: fd.get('method'), edition: editionRow?.edition || '',
+      status: 'paid', paid_at: paidAt, paid_by: fd.get('paid_by'), paid_amount: cents / 100, attachments: receipts };
+    if (!catsOn()) delete row.category;
+    if (!unitsOn()) delete row.unit;
+    await api.insert('bills', row);
+    if (unit !== state.unit && unitsOn()) { state.unit = unit; applyUnit(); }
+    toast(`Conta lançada como paga ✅ ${row.supplier} · ${money(cents)}`);
+    await loadAll({ quiet: true }); render();
+  }, () => {
+    const areaSel = $('[name=area_id]', modalForm), catSel = $('[name=category]', modalForm);
+    areaSel.addEventListener('change', () => { catSel.disabled = !areaSel.value; catSel.innerHTML = catOpts(areaSel.value); });
+    catSel.addEventListener('change', async () => {
+      if (catSel.value !== '__new') return;
+      const name = (prompt(`Nova categoria em ${areas.find((x) => String(x.id) === areaSel.value)?.name}:`) || '').trim();
+      if (!name) { catSel.innerHTML = catOpts(areaSel.value); return; }
+      try {
+        const cats = await api.rpc('add_area_category', { p_area: Number(areaSel.value), p_name: name });
+        const a = areas.find((x) => String(x.id) === areaSel.value); if (a && Array.isArray(cats)) a.categories = cats;
+        catSel.innerHTML = catOpts(areaSel.value, (cats || []).find((c) => c.toLowerCase() === name.toLowerCase()) || name);
+      } catch (e) { toast(e.message); catSel.innerHTML = catOpts(areaSel.value); }
+    });
+    $('[name=unit]', modalForm)?.addEventListener('change', async (e) => {
+      unit = e.target.value;
+      areas = unit === state.unit ? state.areas : await api.select('areas', `select=*&unit=eq.${unit}&order=sort,name`).catch(() => []);
+      areaSel.innerHTML = areaOpts(); catSel.disabled = true; catSel.innerHTML = catOpts('');
+    });
+    $('#rcBack').addEventListener('click', () => pickBillForReceipt(files, info));
+    if (!info.payee) setTimeout(() => $('[name=supplier]', modalForm)?.focus(), 80);
   });
 }
 
