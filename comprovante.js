@@ -92,7 +92,34 @@ function scoreBill(b, info) {
 }
 
 const hasReceipt = (b) => (b.attachments || []).some((a) => a.kind === 'comprovante');
-const receiptCandidates = () => state.bills.filter((b) => b.status === 'pending' || (b.status === 'paid' && !hasReceipt(b)));
+const receiptOpen = (b) => b.status === 'pending' || (b.status === 'paid' && !hasReceipt(b));
+const receiptCandidates = () => state.bills.filter(receiptOpen);
+
+/** Contas das OUTRAS franquias liberadas (o comprovante pode ser do Piauí com o app no Ceará). */
+async function otherUnitReceiptBills() {
+  const others = (typeof myUnits === 'function' ? myUnits() : []).map((u) => u.code).filter((c) => c !== state.unit);
+  if (!others.length) return [];
+  try {
+    const rows = await api.select('bills', `select=*&unit=in.(${others.join(',')})&status=in.(pending,paid)&order=due_date`);
+    return rows.map(normBill).filter(receiptOpen);
+  } catch { return []; }
+}
+/** Faturas de cartão: compras do mesmo cartão e vencimento viram um candidato só (valor = total da fatura). */
+function invoiceCandidates(bills) {
+  const g = {};
+  for (const b of bills) if (b.method === 'cartao' && b.card_id) (g[`${b.unit || ''}|${b.card_id}|${b.due_date}`] ||= []).push(b);
+  return Object.entries(g).filter(([, list]) => list.length > 1).map(([key, list]) => {
+    const card = (b) => (String(b.unit || state.unit) === String(state.unit) ? cardById(b.card_id) : null);
+    const pend = list.some((b) => b.status === 'pending');
+    return { id: 'inv:' + key, invoice: true, bills: list, unit: list[0].unit, supplier: `Fatura ${card(list[0]) ? cardLabel(card(list[0])) : 'do cartão'}`,
+      description: `${list.length} compras`, cents: list.reduce((s, b) => s + b.cents, 0), paidCents: pend ? null : list.reduce((s, b) => s + (b.paidCents ?? b.cents), 0),
+      status: pend ? 'pending' : 'paid', due_date: list[0].due_date, paid_at: list[0].paid_at, pix_key: '', attachments: [] };
+  });
+}
+function allReceiptCandidates(info) {
+  const bills = [...receiptCandidates(), ...(info.others || [])];
+  return [...bills, ...invoiceCandidates(bills)];
+}
 
 /* ---------- Telas ---------- */
 function openReceiptFlow(files) {
@@ -117,19 +144,23 @@ async function analyzeReceipt(files) {
     const text = await readReceipt(file, (p) => { const bar = $('.rc-bar', modalForm); if (bar) bar.style.width = Math.max(8, p) + '%'; });
     info = parseReceipt(text);
   } catch (e) { failed = e.message; }
+  info.others = await otherUnitReceiptBills();
   if (!modal.open || !$('.rc-loading', modalForm)) return; // cancelou
   pickBillForReceipt(files, info, failed);
 }
 
 function pickBillForReceipt(files, info, failed = '', q = '') {
-  const cands = receiptCandidates();
+  const cands = allReceiptCandidates(info);
+  const cmap = new Map(cands.map((b) => [String(b.id), b]));
   const ranked = cands.map((b) => scoreBill(b, info)).filter((r) => r.score >= 20).sort((a, b) => b.score - a.score).slice(0, 6);
   const nq = normR(q).trim();
-  const list = nq ? state.bills.filter((b) => b.status !== 'cancelled' && normR(`${b.supplier} ${b.description} ${money(b.cents)}`).includes(nq)).slice(0, 12).map((b) => ({ b, why: [] }))
+  const searchable = [...state.bills.filter((b) => b.status !== 'cancelled'), ...(info.others || []), ...cands.filter((c) => c.invoice)];
+  searchable.forEach((b) => cmap.set(String(b.id), b));
+  const list = nq ? searchable.filter((b) => normR(`${b.supplier} ${b.description} ${money(b.cents)} ${centsToInput(b.cents)}`).includes(nq)).slice(0, 12).map((b) => ({ b, why: [] }))
     : ranked.length ? ranked : cands.filter((b) => b.status === 'pending').sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 8).map((b) => ({ b, why: [] }));
   const found = info.amounts.length || info.dates.length;
   const row = ({ b, why }, i) => `<li><button type="button" class="rc-cand ${i === 0 && !nq && ranked.length ? 'best' : ''}" data-rcbill="${b.id}">
-      <div class="rc-main"><b>${esc(b.supplier)}</b><span>${esc(b.description || '')}${b.installment ? ' · ' + esc(b.installment) : ''}</span>
+      <div class="rc-main"><b>${b.invoice ? '💳 ' : ''}${esc(b.supplier)}${b.unit && b.unit !== state.unit && typeof unitName === 'function' ? ` <span class="badge open">📍 ${esc(unitName(b.unit))}</span>` : ''}</b><span>${esc(b.description || '')}${b.installment ? ' · ' + esc(b.installment) : ''}</span>
         <span class="muted">${b.status === 'paid' ? `paga em ${fmtDate(b.paid_at)} · sem comprovante` : `vence ${fmtDate(b.due_date)}`}</span>
         ${why.length ? `<span class="rc-why">${why.map((w) => '✓ ' + w).join(' · ')}</span>` : ''}</div>
       <div class="rc-amt">${money(b.status === 'paid' && b.paidCents != null ? b.paidCents : b.cents)}</div></button></li>`;
@@ -142,14 +173,34 @@ function pickBillForReceipt(files, info, failed = '', q = '') {
     <label class="field"><span>Procurar outra conta</span><input id="rcQ" value="${esc(q)}" placeholder="Fornecedor, descrição ou valor" autocomplete="off"></label>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button></div>`,
   () => false, () => {
-    $$('[data-rcbill]', modalForm).forEach((el) => el.addEventListener('click', () => attachReceiptTo(state.bills.find((b) => String(b.id) === el.dataset.rcbill), files, info)));
+    $$('[data-rcbill]', modalForm).forEach((el) => el.addEventListener('click', () => attachReceiptTo(cmap.get(el.dataset.rcbill), files, info)));
     const inp = $('#rcQ'); let t;
     inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { const v = inp.value; pickBillForReceipt(files, info, failed, v); const n = $('#rcQ'); n.focus(); n.setSelectionRange(v.length, v.length); }, 250); });
   });
 }
 
-function attachReceiptTo(b, files, info) {
-  if (!b) return;
+async function attachReceiptTo(c, files, info) {
+  if (!c) return;
+  // Conta da outra franquia: troca de franquia antes (o app só altera contas da franquia aberta)
+  if (c.unit && typeof unitsOn === 'function' && unitsOn() && c.unit !== state.unit) {
+    state.unit = c.unit; applyUnit(); await loadAll({ quiet: true }); render(); toast(`Agora: CASACOR ${unitName()}`);
+  }
+  const bills = (c.invoice ? c.bills : [c]).map((x) => state.bills.find((y) => String(y.id) === String(x.id))).filter(Boolean);
+  if (!bills.length) { toast('Não encontrei essa conta. Atualize e tente de novo.'); return; }
+  if (c.invoice) {
+    const pend = bills.filter((x) => x.status === 'pending');
+    const paidAt = info.dates.find((d) => d <= todayISO()) || todayISO();
+    if (pend.length) return openPay(pend, `Pagar fatura (${pend.length} compras)`, { files, paidAt });
+    return openModal(`<h2>📎 Anexar comprovante</h2><p><b>${esc(c.supplier)}</b> · ${bills.length} compras · ${money(bills.reduce((s, x) => s + (x.paidCents ?? x.cents), 0))}</p>
+      <p class="muted">O comprovante vai para todas as compras desta fatura.</p>
+      <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Anexar</button></div>`,
+    async () => {
+      const receipts = await uploadFiles(files, `pagamentos/${uuid()}`, 'comprovante');
+      for (const x of bills) await api.update('bills', `id=eq.${x.id}`, { attachments: [...x.attachments, ...receipts] });
+      toast('Comprovante anexado à fatura ✅'); await loadAll({ quiet: true }); render();
+    });
+  }
+  const b = bills[0];
   if (b.status === 'pending') {
     const amount = info.amounts.find((a) => a.cents === b.cents)?.cents ?? info.amounts.find((a) => a.strong)?.cents ?? b.cents;
     const paidAt = info.dates.find((d) => d <= todayISO()) || todayISO();
