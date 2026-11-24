@@ -855,6 +855,7 @@ function renderAjustes() {
         <b>Android:</b> no Chrome, menu <b>⋮</b> → <b>Instalar app</b>.</p>
       </div>
       ${backupCard()}
+      ${pushCard()}
     </div>
     <div>
       <div class="card"><div class="card-head"><h2>Áreas (setores)</h2>${isAdmin() ? '<button class="btn small primary" id="newArea">+ Nova</button>' : ''}</div>
@@ -935,6 +936,7 @@ function bindView() {
     $$('[data-editmember]', v).forEach((b) => b.addEventListener('click', () => openMemberForm(state.members.find((m) => m.user_id === b.dataset.editmember))));
   }
   if (ui.view === 'ajustes') {
+    bindPush(v); if (pushState.status === 'unknown') refreshPushStatus().then(() => ui.view === 'ajustes' && !modal.open && render());
     $('#logout').addEventListener('click', () => {
       if (!confirm('Sair desta conta neste aparelho?')) return;
       api.signOut(); localStorage.removeItem(CACHE_KEY); location.reload();

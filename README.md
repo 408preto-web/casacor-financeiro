@@ -112,6 +112,20 @@ então compradores também usam.
 - **Saída:** quanto saiu e para onde (ambiente, obra, evento). **Entrada** manual para doações/devoluções.
 - Histórico por item, aviso de estoque baixo (mínimo por item) e planilha Excel.
 
+## ✨ Melhorias (aprovação, orçamento, fornecedores, boleto, fluxo, holerite, extrato, avisos)
+
+Rode [`supabase-melhorias.sql`](supabase-melhorias.sql) (aprovação, orçamento, saldo) e, para os avisos,
+[`supabase-avisos.sql`](supabase-avisos.sql) + a função [`supabase/functions/avisos`](supabase/functions/avisos/index.ts).
+
+- **Aprovação de compras:** o que o Comprador lança vira **solicitação**; Pagador/Administrador aprova ou recusa (com motivo).
+- **Orçamento por área** (por edição), com avisos de 80% e 100% no Painel.
+- **Fornecedores:** fornecedor conhecido preenche Pix, dados, área e categoria; lista com total pago.
+- **Ler boleto** (foto, PDF ou código colado): valor, vencimento, código e beneficiário.
+- **Fluxo de caixa:** 8 semanas com folha prevista e saldo projetado.
+- **Holerites** em PDF a partir da folha.
+- **Conferir extrato** (OFX/CSV): conferidas, marcar como pagas, lançar o que falta.
+- **Avisos no celular** todo dia às 8h (vencimentos, solicitações, folha).
+
 ## Configuração (uma vez)
 
 1. **Supabase:** crie um projeto novo (supabase.com → New project, região São Paulo).
@@ -145,3 +159,4 @@ então compradores também usam.
 | `relatorio-area.js`, `supabase-categorias.sql` | Categorias por área e relatório de gastos por área |
 | `backup.js` | Cópia de segurança em planilha Excel |
 | `estoque.js`, `supabase-estoque.sql` | Estoque: levantamento, compras que entram ao pagar, saídas |
+| `fornecedores.js`, `boleto.js`, `fluxo.js`, `holerite.js`, `extrato.js`, `push.js` | Melhorias (ver acima) |

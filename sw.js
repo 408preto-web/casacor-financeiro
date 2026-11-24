@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do app para abrir rápido e funcionar com internet instável.
-const CACHE = 'casacor-pagamentos-v43';
-const ASSETS = ['./', 'index.html', 'styles.css', 'config.js', 'api.js', 'rh.js', 'rh-relatorio.js', 'holerite.js', 'relatorio-area.js', 'portaria.js', 'obra.js', 'estoque.js', 'fornecedores.js', 'boleto.js', 'fluxo.js', 'extrato.js', 'comprovante.js', 'backup.js', 'app.js', 'manifest.webmanifest',
+const CACHE = 'casacor-pagamentos-v44';
+const ASSETS = ['./', 'index.html', 'styles.css', 'config.js', 'api.js', 'rh.js', 'rh-relatorio.js', 'holerite.js', 'relatorio-area.js', 'portaria.js', 'obra.js', 'estoque.js', 'fornecedores.js', 'boleto.js', 'fluxo.js', 'extrato.js', 'comprovante.js', 'backup.js', 'push.js', 'app.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/casacor.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -32,4 +32,15 @@ self.addEventListener('fetch', (e) => {
       .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; })
       .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('index.html')))
   );
+});
+
+// Avisos no celular (enviados pela função "avisos" do Supabase)
+self.addEventListener('push', (e) => {
+  let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data?.text() }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'CASACOR', { body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', data: { url: d.url || './' }, tag: 'casacor-avisos', renotify: true }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = new URL(e.notification.data?.url || './', self.registration.scope).href;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => { const w = ws.find((x) => x.url.startsWith(self.registration.scope)); return w ? w.focus() : self.clients.openWindow(url); }));
 });
