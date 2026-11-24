@@ -186,6 +186,7 @@ async function loadAll({ quiet = false } = {}) {
     await loadGate(); // portaria da obra (portaria.js)
     await loadObra(); // cronograma da obra (obra.js)
     await loadStock(); // estoque (estoque.js)
+    state.budgets = isPayer() ? await api.select('area_budgets', 'select=*').catch(() => null) : null; // orçamento por área
     state.invites = me?.role === 'admin' ? await api.select('invites', 'select=*&used_at=is.null&order=created_at.desc').catch(() => null) : null;
     await loadOtherUnitsDue();
     ui.offline = false;
@@ -606,6 +607,7 @@ function renderPainel() {
   ${alert}
   ${tomorrowAlert}
   ${isPayer() ? otherUnitsAlert() : ''}
+  ${isPayer() ? budgetAlerts() : ''}
   ${isPayer() && requestBills().length ? `<div class="alerts"><div class="alert info"><span class="alert-icon">📝</span><div class="alert-text"><b>${requestBills().length} solicitação(ões) de compra aguardando aprovação</b> (${money(sumCents(requestBills()))}) <span class="muted">${[...new Set(requestBills().map((b) => firstName(b.created_by)))].map(esc).join(', ')}</span></div><button class="btn small primary" data-reqs="1">Ver e aprovar</button></div></div>` : ''}
   ${isHR() ? payrollBanner() : ''}
   ${isHR() ? rhAlertsBanner() : ''}
@@ -871,6 +873,7 @@ function bindView() {
   $$('[data-go]', v).forEach((el) => el.addEventListener('click', () => setView(el.dataset.go)));
   $('#rcOpen', v)?.addEventListener('click', () => openReceiptFlow());
   $$('[data-reqs]', v).forEach((b) => b.addEventListener('click', () => { ui.tab = 'requested'; setView('contas'); }));
+  $$('[data-gobudget]', v).forEach((b) => b.addEventListener('click', () => { ui.report.tab = 'area'; ui.report.area = ''; ui.report.edition = state.settings.edition || ''; setView('relatorios'); }));
   $('#bkBtn', v)?.addEventListener('click', makeBackup);
   $('#bkNow', v)?.addEventListener('click', makeBackup);
   $$('[data-gounit]', v).forEach((b) => b.addEventListener('click', () => { ui.view = 'painel'; switchUnit(b.dataset.gounit); }));

@@ -49,6 +49,61 @@ const periodLabel = () => {
     { all: '', paid: '· só pagas', pending: '· só a pagar' }[r.status || 'all']].filter(Boolean).join(' ');
 };
 
+/* ---------- Orçamento por área (por edição) ---------- */
+const budgetOn = () => Array.isArray(state.budgets);
+const budgetEdition = () => ui.report.edition || state.settings.edition || '';
+/** Gasto da área na edição (lançado nela + folha dos funcionários dela; só aprovadas, sem canceladas). */
+function areaSpent(areaId, edition) {
+  return state.bills.filter((b) => b.status !== 'cancelled' && isApproved(b) && (!edition || b.edition === edition) && (effArea(b) === String(areaId) || String(b.area_id) === String(areaId)))
+    .reduce((s, b) => s + billAmt(b), 0);
+}
+function budgetRows(edition = budgetEdition()) {
+  if (!budgetOn()) return [];
+  return state.areas.map((a) => {
+    const bud = state.budgets.find((x) => String(x.area_id) === String(a.id) && x.edition === edition);
+    const budget = bud ? toCents(bud.amount) : 0; const spent = areaSpent(a.id, edition);
+    return { a, bud, budget, spent, pct: budget ? Math.round((spent / budget) * 100) : null };
+  }).filter((r) => r.budget || r.spent);
+}
+function budgetAlerts() {
+  if (!budgetOn()) return '';
+  const rows = budgetRows(state.settings.edition || '').filter((r) => r.budget && r.pct >= 80);
+  if (!rows.length) return '';
+  return `<div class="alerts">${rows.map((r) => `<div class="alert ${r.pct >= 100 ? 'danger' : ''}"><span class="alert-icon">${r.pct >= 100 ? '🚨' : '🎯'}</span>
+    <div class="alert-text"><b>${esc(r.a.name)}: ${r.pct}% do orçamento</b> — gasto ${money(r.spent)} de ${money(r.budget)}${r.pct >= 100 ? ` (<b>${money(r.spent - r.budget)} acima</b>)` : ` (restam ${money(r.budget - r.spent)})`}</div>
+    <button class="btn small" data-gobudget="1">Ver</button></div>`).join('')}</div>`;
+}
+const budgetBar = (r) => `<div class="bud-bar ${r.pct >= 100 ? 'over' : r.pct >= 80 ? 'warn' : ''}"><i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
+function budgetCard() {
+  if (!budgetOn()) return '';
+  const ed = budgetEdition(); const rows = budgetRows(ed);
+  const tb = rows.reduce((s, r) => s + r.budget, 0), ts = rows.filter((r) => r.budget).reduce((s, r) => s + r.spent, 0);
+  return `<div class="card mt"><div class="card-head"><h2>🎯 Orçamento ${ed ? 'da edição ' + esc(ed) : ''}</h2>${isAdmin() ? '<button class="btn small" id="budEdit">Definir orçamento</button>' : ''}</div>
+    ${rows.some((r) => r.budget) ? `<ul class="bud-list">${rows.map((r) => `<li><div class="bud-top"><b><span class="area-dot" style="--c:${r.a.color}"></span>${esc(r.a.name)}</b>
+      <span>${money(r.spent)} ${r.budget ? `de ${money(r.budget)} · <b class="${r.pct >= 100 ? 'neg' : r.pct >= 80 ? 'warn-t' : ''}">${r.pct}%</b>` : '<span class="muted">(sem orçamento)</span>'}</span></div>${r.budget ? budgetBar(r) : ''}</li>`).join('')}</ul>
+      <div class="list-total"><span>Total com orçamento</span><b>${money(ts)} de ${money(tb)} (${tb ? Math.round((ts / tb) * 100) : 0}%)</b></div>`
+      : `<div class="empty small">Nenhum orçamento definido para ${ed ? 'a edição ' + esc(ed) : 'esta edição'}.${isAdmin() ? ' Toque em <b>Definir orçamento</b>.' : ''}</div>`}
+    <p class="muted small">O gasto conta tudo o que foi lançado na área nesta edição (pago e a pagar), mais a folha dos funcionários da área. O Painel avisa ao chegar a 80% e 100%.</p></div>`;
+}
+function openBudgetForm() {
+  const ed = budgetEdition();
+  openModal(`<h2>🎯 Orçamento por área</h2><p class="muted" style="margin-top:-6px">Edição <b>${esc(ed || '—')}</b>. Deixe em branco a área sem orçamento.</p>
+    <div class="bud-form">${state.areas.filter((a) => a.active).map((a) => { const b = state.budgets.find((x) => String(x.area_id) === String(a.id) && x.edition === ed);
+      return `<label class="bud-row"><span><span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}<small>gasto até agora: ${money(areaSpent(a.id, ed))}</small></span>
+        <input class="amount-input" name="b_${a.id}" inputmode="decimal" value="${b ? centsToInput(toCents(b.amount)) : ''}" placeholder="R$ 0,00"></label>`; }).join('')}</div>
+    <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Salvar</button></div>`,
+  async (action, fd) => {
+    for (const a of state.areas.filter((x) => x.active)) {
+      const raw = String(fd.get('b_' + a.id) || '').trim(); const cents = parseMoney(raw);
+      const cur = state.budgets.find((x) => String(x.area_id) === String(a.id) && x.edition === ed);
+      if (!raw || cents <= 0) { if (cur) await api.remove('area_budgets', `id=eq.${cur.id}`); continue; }
+      if (cur) { if (toCents(cur.amount) !== cents) await api.update('area_budgets', `id=eq.${cur.id}`, { amount: cents / 100 }); }
+      else await api.insert('area_budgets', { area_id: a.id, edition: ed, amount: cents / 100 });
+    }
+    toast('Orçamento salvo ✅'); await loadAll({ quiet: true }); render();
+  });
+}
+
 function renderAreaReport() {
   const r = ui.report; const d = areaReportData();
   const a = d.areaId ? areaById(d.areaId) : null;
@@ -78,7 +133,9 @@ function renderAreaReport() {
         <div class="tx-meta">${b.status === 'paid' ? `pago ${fmtDate(b.paid_at)}` : `vence ${fmtDate(b.due_date)}`}${!d.areaId ? ' · ' + esc(areaById(effArea(b)).name) : ''}${b.employee_id && String(b.area_id) !== effArea(b) ? ' · folha' : ''}</div></div>
         <div class="tx-amount ${b.status === 'paid' ? 'pos' : 'neg'}">${money(billAmt(b))}<small>${b.status === 'paid' ? 'pago' : 'a pagar'}</small></div></li>`).join('')}</ul></details>`).join('')}</div>` : `<div class="card mt"><div class="empty small">Nenhuma conta ${a ? 'em ' + esc(a.name) : ''} neste período.</div></div>`;
   const note = isHR() ? '<p class="muted small mt">A folha de pagamento aparece em <b>Pessoal</b> (folha completa) e também na área de cada funcionário (cadastro do RH) — ex.: os semanalistas da obra contam em <b>Obra</b>. Em <b>Todas</b>, cada pagamento é somado uma vez só.</p>' : '';
-  return head + cards + uncat + byAreaCard + catCard + detail + note;
+  const selBud = d.areaId && budgetOn() ? budgetRows(budgetEdition()).find((r) => String(r.a.id) === String(d.areaId) && r.budget) : null;
+  const budArea = selBud ? `<div class="card mt"><div class="bud-top"><b>🎯 Orçamento de ${esc(selBud.a.name)} (edição ${esc(budgetEdition())})</b><span>${money(selBud.spent)} de ${money(selBud.budget)} · <b class="${selBud.pct >= 100 ? 'neg' : ''}">${selBud.pct}%</b></span></div>${budgetBar(selBud)}</div>` : '';
+  return head + cards + (d.areaId ? budArea : budgetCard()) + uncat + byAreaCard + catCard + detail + note;
 }
 
 /* ---------- Classificar contas sem categoria ---------- */
@@ -219,6 +276,7 @@ function bindAreaReport(v) {
   $$('[data-rarea]', v).forEach((b) => b.addEventListener('click', () => { ui.report.area = b.dataset.rarea; render(); }));
   $('#rstatus', v)?.addEventListener('change', (e) => { ui.report.status = e.target.value; render(); });
   $('#arClassify', v)?.addEventListener('click', openClassify);
+  $('#budEdit', v)?.addEventListener('click', openBudgetForm);
   $('#arShare', v)?.addEventListener('click', shareAreaReport);
   $('#arPrint', v)?.addEventListener('click', printAreaReport);
   $('#arCsv', v)?.addEventListener('click', exportAreaCsv);

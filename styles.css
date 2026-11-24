@@ -800,3 +800,15 @@ button.chip { cursor: pointer; }
 .rc-diff { margin: 10px 0 4px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 14%, transparent); font-size: 14px; display: grid; gap: 6px; }
 .late-q { margin: 10px 0 4px; padding: 12px; border-radius: 12px; border: 2px solid color-mix(in srgb, var(--warn) 55%, var(--border)); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); display: grid; gap: 8px; }
 .late-q p { margin: 0; font-size: 15px; }
+
+/* Orçamento */
+.bud-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.bud-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+.bud-bar { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.bud-bar i { display: block; height: 100%; background: var(--income); }
+.bud-bar.warn i { background: var(--warn); } .bud-bar.over i { background: var(--danger); }
+.warn-t { color: var(--warn); }
+.bud-form { display: grid; gap: 8px; max-height: 60vh; overflow: auto; margin-bottom: 8px; }
+.bud-row { display: grid; grid-template-columns: 1fr 150px; gap: 10px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.bud-row small { display: block; color: var(--muted); font-size: 12px; }
+.bud-row .amount-input { font-size: 18px; min-height: 44px; }
