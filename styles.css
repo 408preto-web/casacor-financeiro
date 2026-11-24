@@ -812,3 +812,5 @@ button.chip { cursor: pointer; }
 .bud-row { display: grid; grid-template-columns: 1fr 150px; gap: 10px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .bud-row small { display: block; color: var(--muted); font-size: 12px; }
 .bud-row .amount-input { font-size: 18px; min-height: 44px; }
+.bol-scan { display: grid; gap: 4px; }
+.bol-scan .btn { justify-self: start; }

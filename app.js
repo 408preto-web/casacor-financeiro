@@ -1031,6 +1031,7 @@ function openBillForm(bill, defaults = {}) {
     <h2>${isEdit ? 'Editar conta' : state.approvalOn && state.me.role === 'member' ? '📝 Solicitar compra' : 'Lançar conta a pagar'}</h2>
     ${!isEdit && state.approvalOn && state.me.role === 'member' ? '<p class="muted" style="margin-top:-6px">Vai para aprovação de quem paga. Depois de aprovada, entra em “a pagar”.</p>' : ''}
     <div class="form-grid">
+      ${!isEdit ? boletoScanField() : ''}
       <label class="field full"><span>Fornecedor *</span><input name="supplier" list="suppliers" value="${esc(b.supplier)}" required placeholder="Quem vai receber o pagamento" autocomplete="off">
         <datalist id="suppliers">${suppliers.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></label>
       ${!state.areas.length ? `<div class="field full no-areas">${isAdmin()
@@ -1182,6 +1183,7 @@ function openBillForm(bill, defaults = {}) {
     $$('[name="method"], [name="card_id"], [name="purchase_date"], [name="term"], [name="installments"], [name="interval"]', modalForm).forEach((el) => el.addEventListener('change', sync));
     $('[name="amount"]', modalForm).addEventListener('input', sync);
     bindSupplierAutofill(isEdit); // fornecedor conhecido → Pix, dados, área (fornecedores.js)
+    bindBoletoScan(); // ler boleto por foto/PDF/código (boleto.js)
     // Data digitada à mão → prazo "Outra data"
     $('[name="due_date"]', modalForm).addEventListener('change', () => { const c = $('[name="term"][value="custom"]', modalForm); if (c) c.checked = true; sync(); });
     const showFiles = () => {
