@@ -1252,8 +1252,9 @@ function openPay(bills, title, preset = {}) {
       <label class="field"><span>Pago por</span><select name="paid_by">${payers.map((p) => `<option value="${p.user_id}" ${p.user_id === state.me.user_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
       ${preset.files ? `<div class="field"><span>Comprovante</span><div class="rc-attached">📎 ${preset.files.map((f) => esc(f.name)).join(', ')}</div></div>`
         : '<label class="field"><span>Comprovante (foto ou PDF)</span><input type="file" name="receipt" accept="image/*,application/pdf" multiple></label>'}
-      <label class="field full"><span>Observação do pagamento</span><input name="payment_notes" placeholder="Ex.: pago com desconto, juros…"></label>
+      <label class="field full"><span>Observação do pagamento</span><input name="payment_notes" value="${esc(preset.notes || '')}" placeholder="Ex.: pago com desconto, juros…"></label>
     </div>
+    ${one && preset.hint ? `<div class="rc-diff" id="payDiff">${preset.hint}</div>` : one ? '<div class="rc-diff" id="payDiff" hidden></div>' : ''}
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Confirmar pagamento</button></div>`,
   async (action, fd) => {
     const paidCents = one ? parseMoney(fd.get('amount')) : null;
@@ -1269,6 +1270,14 @@ function openPay(bills, title, preset = {}) {
     }
     toast(bills.length > 1 ? `${bills.length} contas pagas ✅` : 'Conta paga ✅');
     await loadAll({ quiet: true }); render();
+  }, () => {
+    const inp = $('[name="amount"]', modalForm); const box = $('#payDiff', modalForm);
+    if (one && inp && box) inp.addEventListener('input', () => {
+      const d = parseMoney(inp.value) - one.cents;
+      box.hidden = !d || parseMoney(inp.value) <= 0;
+      box.innerHTML = d > 0 ? `⚠️ Juros/multa: <b>+ ${money(d)}</b> sobre ${money(one.cents)}` : `💚 Desconto: <b>− ${money(-d)}</b> sobre ${money(one.cents)}`;
+      const n = $('[name="payment_notes"]', modalForm); if (n && (!n.value || /^(Juros\/multa|Desconto) de/.test(n.value))) n.value = d ? (d > 0 ? `Juros/multa de ${money(d)} (valor da conta ${money(one.cents)})` : `Desconto de ${money(-d)} (valor da conta ${money(one.cents)})`) : '';
+    });
   });
 }
 

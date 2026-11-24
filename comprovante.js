@@ -65,7 +65,15 @@ function parseReceipt(text) {
   for (const m of t.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)) dates.add(`${m[3]}-${m[2]}-${m[1]}`);
   for (const m of t.matchAll(/(\d{1,2})\s*(?:de\s+)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:de\s+)?(\d{4})/g)) dates.add(`${m[3]}-${String(MONTHS_PT[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`);
   const validDates = [...dates].filter((d) => !Number.isNaN(Date.parse(d)) && d >= '2020-01-01' && d <= addDaysISO(todayISO(), 2)).sort().reverse();
-  return { text: t, raw: String(text || ''), digits: t.replace(/\D/g, ''), amounts, dates: validDates, payee: extractPayee(text), pix: /\bpix\b/.test(t) };
+  const AMT = '(\\d{1,3}(?:[.\\s]?\\d{3})*,\\d{2})';
+  const grab = (words) => [...t.matchAll(new RegExp(`(?:${words})[^0-9]{0,30}?(?:r\\s?[$s5]\\s*)?${AMT}`, 'g'))].map((m) => parseMoney(m[1].replace(/\s/g, ''))).filter((c) => c > 0);
+  const paidList = grab('valor\\s+(?:total\\s+)?pago|total\\s+pago|valor\\s+cobrado|valor\\s+do\\s+pagamento|valor\\s+debitado|valor\\s+total|total\\s+a\\s+pagar');
+  const origList = grab('valor\\s+(?:do\\s+)?documento|valor\\s+nominal|valor\\s+original|valor\\s+do\\s+(?:boleto|titulo)|valor\\s+da\\s+fatura');
+  const extraCents = grab('juros|multa|mora|encargos|acrescimos?').reduce((s, c) => s + c, 0);
+  const discCents = grab('desconto|abatimento').reduce((s, c) => s + c, 0);
+  [...paidList, ...origList].forEach((c) => { if (!seen.has(c)) { seen.add(c); amounts.push({ cents: c, strong: true }); } });
+  return { text: t, raw: String(text || ''), digits: t.replace(/\D/g, ''), amounts, dates: validDates, payee: extractPayee(text), pix: /\bpix\b/.test(t),
+    paidCents: paidList.length ? Math.max(...paidList) : null, origCents: origList[0] || null, extraCents, discCents };
 }
 
 /** Nome de quem recebeu (destino / favorecido / para…), para virar o fornecedor. */
@@ -89,6 +97,21 @@ function extractPayee(text) {
 }
 const titleName = (s) => (s === s.toUpperCase() ? s.toLowerCase().replace(/(^|\s)(\S)/g, (x, a, b) => a + b.toUpperCase()).replace(/\s(D[aeo]s?|E|Ltda|Me|S\/a)\b/gi, (x) => (/ltda|me|s\/a/i.test(x) ? x.toUpperCase() : x.toLowerCase())) : s).slice(0, 80);
 
+/** Quanto foi pago de verdade, pelo comprovante: valor pago informado; senão original + juros − desconto;
+ *  senão, se a conta estava atrasada, um valor até 20% maior que o da conta (juros/multa); senão o valor da conta. */
+function receiptPaidCents(billCents, info, overdue) {
+  if (info.paidCents) return info.paidCents;
+  if (info.origCents && (info.extraCents || info.discCents)) return info.origCents + info.extraCents - info.discCents;
+  if (overdue) { const up = info.amounts.map((a) => a.cents).filter((c) => c > billCents && c <= billCents * 1.2).sort((x, y) => y - x)[0]; if (up) return up; }
+  return info.amounts.find((a) => a.cents === billCents)?.cents ?? info.amounts.find((a) => a.strong)?.cents ?? billCents;
+}
+/** Texto de juros/multa ou desconto (diferença entre o pago e o valor da conta). */
+function paidDiffNote(billCents, paidCents) {
+  const d = paidCents - billCents; if (!d) return {};
+  return d > 0 ? { hint: `⚠️ Pago com juros/multa: <b>+ ${money(d)}</b> (conta de ${money(billCents)} → pago ${money(paidCents)})`, notes: `Juros/multa de ${money(d)} (valor da conta ${money(billCents)})` }
+    : { hint: `💚 Pago com desconto: <b>− ${money(-d)}</b> (conta de ${money(billCents)} → pago ${money(paidCents)})`, notes: `Desconto de ${money(-d)} (valor da conta ${money(billCents)})` };
+}
+
 const daysBetween = (a, b) => Math.abs((Date.parse(a) - Date.parse(b)) / 864e5);
 
 function scoreBill(b, info) {
@@ -96,6 +119,7 @@ function scoreBill(b, info) {
   const cents = b.status === 'paid' && b.paidCents != null ? b.paidCents : b.cents;
   const exact = info.amounts.find((a) => a.cents === cents);
   if (exact) { score += exact.strong ? 55 : 45; why.push('valor igual'); }
+  else if (b.status === 'pending' && info.amounts.some((a) => a.cents > cents && a.cents <= cents * 1.2 && (b.due_date < (info.dates[0] || todayISO())))) { score += 35; why.push('valor + juros (atrasada)'); }
   else if (info.amounts.some((a) => Math.abs(a.cents - cents) <= Math.max(100, cents * 0.02))) { score += 15; why.push('valor parecido'); }
   const words = normR(`${b.supplier}`).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w));
   const hits = words.filter((w) => info.text.includes(w));
@@ -226,17 +250,24 @@ async function attachReceiptTo(c, files, info) {
   }
   const b = bills[0];
   if (b.status === 'pending') {
-    const amount = info.amounts.find((a) => a.cents === b.cents)?.cents ?? info.amounts.find((a) => a.strong)?.cents ?? b.cents;
     const paidAt = info.dates.find((d) => d <= todayISO()) || todayISO();
-    return openPay([b], 'Marcar como pago', { files, amountCents: amount, paidAt });
+    const amount = receiptPaidCents(b.cents, info, b.due_date < paidAt);
+    return openPay([b], 'Marcar como pago', { files, amountCents: amount, paidAt, ...paidDiffNote(b.cents, amount) });
   }
+  // Conta já paga: se o comprovante mostra outro valor (juros/multa ou desconto), oferece corrigir o valor pago
+  const nowPaid = b.paidCents ?? b.cents;
+  const real = receiptPaidCents(b.cents, info, b.due_date < (b.paid_at || todayISO()));
+  const fix = real && real !== nowPaid && Math.abs(real - b.cents) <= b.cents * 0.5 ? paidDiffNote(b.cents, real) : null;
   openModal(`<h2>📎 Anexar comprovante</h2>
-    <p><b>${esc(b.supplier)}</b> · ${money(b.paidCents ?? b.cents)}<br><span class="muted">paga em ${fmtDate(b.paid_at)}</span></p>
+    <p><b>${esc(b.supplier)}</b> · ${money(nowPaid)}<br><span class="muted">paga em ${fmtDate(b.paid_at)}</span></p>
+    ${fix ? `<div class="rc-diff">${fix.hint || ''}<label class="check"><input type="checkbox" name="fixpaid" checked><span>Atualizar o valor pago para <b>${money(real)}</b></span></label></div>` : ''}
     <p class="muted">Arquivo: ${files.map((f) => esc(f.name)).join(', ')}</p>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Anexar</button></div>`,
-  async () => {
+  async (action, fd) => {
     const receipts = await uploadFiles(files, `pagamentos/${uuid()}`, 'comprovante');
-    const rows = await api.update('bills', `id=eq.${b.id}`, { attachments: [...b.attachments, ...receipts] });
+    const patch = { attachments: [...b.attachments, ...receipts] };
+    if (fix && fd.get('fixpaid') === 'on') { patch.paid_amount = real / 100; patch.payment_notes = [b.payment_notes, fix.notes].filter(Boolean).join(' · '); }
+    const rows = await api.update('bills', `id=eq.${b.id}`, patch);
     if (!rows?.length) throw new Error('Não foi possível anexar (permissão).');
     toast('Comprovante anexado ✅'); await loadAll({ quiet: true }); render();
   });
