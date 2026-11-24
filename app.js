@@ -730,10 +730,11 @@ function group(list, keyFn, labelFn, colorFn) {
   return Object.entries(m).map(([k, v]) => ({ k, v, label: labelFn(k), color: colorFn?.(k) })).sort((a, b) => b.v - a.v);
 }
 function renderRelatorios() {
-  const tabs = `<div class="tabs">${[['area', '🧾 Por área e categoria'], ['geral', '📊 Visão geral'], ['forn', '🏪 Fornecedores'], ...(isPayer() ? [['fluxo', '💰 Fluxo de caixa']] : [])].map(([k, l]) => `<button class="tab ${(ui.report.tab || 'area') === k ? 'active' : ''}" data-rtab="${k}">${l}</button>`).join('')}</div>`;
+  const tabs = `<div class="tabs">${[['area', '🧾 Por área e categoria'], ['geral', '📊 Visão geral'], ['forn', '🏪 Fornecedores'], ...(isPayer() ? [['fluxo', '💰 Fluxo de caixa'], ['extrato', '🏦 Conferir extrato']] : [])].map(([k, l]) => `<button class="tab ${(ui.report.tab || 'area') === k ? 'active' : ''}" data-rtab="${k}">${l}</button>`).join('')}</div>`;
   if ((ui.report.tab || 'area') === 'area') return tabs + renderAreaReport();
   if (ui.report.tab === 'forn') return tabs + renderSuppliers();
   if (ui.report.tab === 'fluxo') return tabs + renderCashFlow();
+  if (ui.report.tab === 'extrato') return tabs + renderExtrato();
   return tabs + renderRelatoriosGeral();
 }
 function renderRelatoriosGeral() {
@@ -902,6 +903,7 @@ function bindView() {
     bindAreaReport(v);
     bindSuppliers(v);
     bindCashFlow(v);
+    bindExtrato(v);
   }
   if (ui.view === 'portaria') bindPortaria(v);
   if (ui.view === 'obra') bindObra(v);

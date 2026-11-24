@@ -816,3 +816,4 @@ button.chip { cursor: pointer; }
 .bol-scan .btn { justify-self: start; }
 .cf-bar { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; } .cf-bar i { display: block; height: 100%; background: var(--primary); }
 .cf-table tbody tr { cursor: pointer; }
+.x-act { display: grid; justify-items: end; gap: 4px; }

@@ -298,9 +298,9 @@ async function openNewPaidBill(files, info) {
       <label class="field"><span>Data do pagamento *</span><input type="date" name="paid_at" value="${date}" required></label>
       <label class="field"><span>Forma</span><select name="method">${['pix', 'transferencia', 'boleto', 'dinheiro'].map((m) => `<option value="${m}" ${(info.pix ? 'pix' : 'transferencia') === m ? 'selected' : ''}>${METHODS[m].label}</option>`).join('')}</select></label>
       <label class="field"><span>Pago por</span><select name="paid_by">${payers.map((p) => `<option value="${p.user_id}" ${p.user_id === state.me.user_id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
-      <div class="field full"><span>Comprovante</span><div class="rc-attached">📎 ${files.map((f) => esc(f.name)).join(', ')}</div></div>
+      ${files.length ? `<div class="field full"><span>Comprovante</span><div class="rc-attached">📎 ${files.map((f) => esc(f.name)).join(', ')}</div></div>` : ''}
     </div>
-    <div class="modal-actions"><button type="button" class="btn" id="rcBack">⬅️ Voltar à lista</button><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Lançar como paga</button></div>`,
+    <div class="modal-actions"><button type="button" class="btn" id="rcBack">⬅️ Voltar</button><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Lançar como paga</button></div>`,
   async (action, fd) => {
     const cents = parseMoney(fd.get('amount')); const areaId = fd.get('area_id'); const cat = fd.get('category') === '__new' ? '' : fd.get('category') || '';
     const a = areas.find((x) => String(x.id) === String(areaId));
@@ -337,7 +337,7 @@ async function openNewPaidBill(files, info) {
       areas = unit === state.unit ? state.areas : await api.select('areas', `select=*&unit=eq.${unit}&order=sort,name`).catch(() => []);
       areaSel.innerHTML = areaOpts(); catSel.disabled = true; catSel.innerHTML = catOpts('');
     });
-    $('#rcBack').addEventListener('click', () => pickBillForReceipt(files, info));
+    $('#rcBack').addEventListener('click', () => (info.back ? info.back() : pickBillForReceipt(files, info)));
     if (!info.payee) setTimeout(() => $('[name=supplier]', modalForm)?.focus(), 80);
   });
 }
