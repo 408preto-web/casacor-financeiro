@@ -486,6 +486,8 @@ function updateBadges() {
 
 /* ---------- Componentes ---------- */
 const isApproved = (b) => !b.approval || b.approval === 'approved';
+/** Última escolha do comprador ao lançar: pedido de compra ou conta já combinada. */
+const launchKind = () => { try { return localStorage.getItem('casacor:launchKind') === 'approved' ? 'approved' : 'requested'; } catch { return 'requested'; } };
 const pendingBills = () => state.bills.filter((b) => b.status === 'pending' && isApproved(b));
 const requestBills = () => state.bills.filter((b) => b.approval === 'requested' && b.status === 'pending');
 
@@ -1034,8 +1036,10 @@ function openBillForm(bill, defaults = {}) {
   const suppliers = [...new Set(state.bills.map((x) => x.supplier))].sort();
   const activeCards = state.cards.filter((c) => c.active || c.id === b.card_id);
   const html = `
-    <h2>${isEdit ? 'Editar conta' : state.approvalOn && state.me.role === 'member' ? '📝 Solicitar compra' : 'Lançar conta a pagar'}</h2>
-    ${!isEdit && state.approvalOn && state.me.role === 'member' ? '<p class="muted" style="margin-top:-6px">Vai para aprovação de quem paga. Depois de aprovada, entra em “a pagar”.</p>' : ''}
+    <h2>${isEdit ? 'Editar conta' : 'Lançar'}</h2>
+    ${!isEdit && state.approvalOn && state.me.role === 'member' ? `<div class="kind-pick">
+      <label class="kind-card"><input type="radio" name="launch_kind" value="requested" ${launchKind() === 'requested' ? 'checked' : ''}><span><b>📝 Pedido de compra</b><small>Precisa de aprovação de quem paga (ex.: material com orçamento).</small></span></label>
+      <label class="kind-card"><input type="radio" name="launch_kind" value="approved" ${launchKind() === 'approved' ? 'checked' : ''}><span><b>🧾 Conta já combinada</b><small>Só lançar para pagar — vai direto para "a pagar".</small></span></label></div>` : ''}
     <div class="form-grid">
       ${!isEdit ? boletoScanField() : ''}
       <label class="field full"><span>Fornecedor *</span><input name="supplier" list="suppliers" value="${esc(b.supplier)}" required placeholder="Quem vai receber o pagamento" autocomplete="off">
@@ -1099,6 +1103,7 @@ function openBillForm(bill, defaults = {}) {
       bank_info: method === 'transferencia' ? fd.get('bank_info').trim() : '', card_id: card ? card.id : null, notes: fd.get('notes').trim(),
     };
     if (!base.supplier || !base.area_id) { toast('Preencha fornecedor e área'); return false; }
+    if (!isEdit && state.approvalOn && state.me.role === 'member') { base.approval = fd.get('launch_kind') === 'approved' ? 'approved' : 'requested'; try { localStorage.setItem('casacor:launchKind', base.approval); } catch { /* ignora */ } }
     if (catsOn()) {
       base.category = fd.get('category') === '__new' ? '' : fd.get('category') || '';
       if (!base.category && areaCats(base.area_id).length) { toast('Escolha a categoria (o que é)'); return false; }
@@ -1129,7 +1134,7 @@ function openBillForm(bill, defaults = {}) {
         installment: n > 1 ? `${i + 1}/${n}` : '', attachments,
       }));
       await api.insert('bills', rows);
-      toast(state.approvalOn && state.me.role === 'member' ? '📝 Solicitação enviada — aguarda aprovação' : n > 1 ? `Conta lançada em ${n} parcelas ✅` : 'Conta lançada ✅');
+      toast(base.approval === 'requested' ? '📝 Pedido enviado — aguarda aprovação' : n > 1 ? `Conta lançada em ${n} parcelas ✅` : 'Conta lançada ✅');
     }
     await loadAll({ quiet: true });
     render();

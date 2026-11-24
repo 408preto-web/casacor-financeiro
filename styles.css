@@ -817,3 +817,9 @@ button.chip { cursor: pointer; }
 .cf-bar { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; } .cf-bar i { display: block; height: 100%; background: var(--primary); }
 .cf-table tbody tr { cursor: pointer; }
 .x-act { display: grid; justify-items: end; gap: 4px; }
+.kind-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 12px; }
+.kind-card input { position: absolute; opacity: 0; pointer-events: none; }
+.kind-card span { display: grid; gap: 2px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; cursor: pointer; background: var(--surface); height: 100%; }
+.kind-card small { color: var(--muted); font-size: 12px; }
+.kind-card input:checked + span { border: 2px solid var(--primary); background: color-mix(in srgb, var(--primary) 9%, var(--surface)); }
+@media (max-width: 420px) { .kind-pick { grid-template-columns: 1fr; } }

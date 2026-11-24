@@ -5,7 +5,8 @@
 -- =====================================================================
 
 -- ---------- 1. Aprovação de compras ----------
--- Conta lançada por Comprador vira SOLICITAÇÃO; Pagador/Administrador aprova (vira "a pagar") ou recusa.
+-- O Comprador escolhe ao lançar: PEDIDO DE COMPRA (vira solicitação; Pagador/Administrador aprova ou recusa)
+-- ou CONTA JÁ COMBINADA (vai direto para "a pagar").
 alter table public.bills add column if not exists approval text not null default 'approved';
 do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'bills_approval_check') then
@@ -20,8 +21,9 @@ create or replace function public.bills_approval_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
-    if public.my_role() = 'member' then            -- comprador: sempre solicitação
-      new.approval := 'requested'; new.status := 'pending';
+    if public.my_role() = 'member' then            -- comprador: pedido de compra ou conta já combinada
+      if new.approval not in ('requested', 'approved') then new.approval := 'requested'; end if;
+      new.status := 'pending';
     elsif new.approval = 'requested' and public.is_payer() then
       new.approval := 'approved';
     end if;
