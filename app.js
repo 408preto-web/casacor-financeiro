@@ -730,8 +730,9 @@ function group(list, keyFn, labelFn, colorFn) {
   return Object.entries(m).map(([k, v]) => ({ k, v, label: labelFn(k), color: colorFn?.(k) })).sort((a, b) => b.v - a.v);
 }
 function renderRelatorios() {
-  const tabs = `<div class="tabs">${[['area', '🧾 Por área e categoria'], ['geral', '📊 Visão geral']].map(([k, l]) => `<button class="tab ${(ui.report.tab || 'area') === k ? 'active' : ''}" data-rtab="${k}">${l}</button>`).join('')}</div>`;
+  const tabs = `<div class="tabs">${[['area', '🧾 Por área e categoria'], ['geral', '📊 Visão geral'], ['forn', '🏪 Fornecedores']].map(([k, l]) => `<button class="tab ${(ui.report.tab || 'area') === k ? 'active' : ''}" data-rtab="${k}">${l}</button>`).join('')}</div>`;
   if ((ui.report.tab || 'area') === 'area') return tabs + renderAreaReport();
+  if (ui.report.tab === 'forn') return tabs + renderSuppliers();
   return tabs + renderRelatoriosGeral();
 }
 function renderRelatoriosGeral() {
@@ -898,6 +899,7 @@ function bindView() {
     $('#rto')?.addEventListener('change', (e) => { ui.report.to = e.target.value; render(); });
     $('#csv')?.addEventListener('click', exportCsv);
     bindAreaReport(v);
+    bindSuppliers(v);
   }
   if (ui.view === 'portaria') bindPortaria(v);
   if (ui.view === 'obra') bindObra(v);
@@ -1179,6 +1181,7 @@ function openBillForm(bill, defaults = {}) {
     };
     $$('[name="method"], [name="card_id"], [name="purchase_date"], [name="term"], [name="installments"], [name="interval"]', modalForm).forEach((el) => el.addEventListener('change', sync));
     $('[name="amount"]', modalForm).addEventListener('input', sync);
+    bindSupplierAutofill(isEdit); // fornecedor conhecido → Pix, dados, área (fornecedores.js)
     // Data digitada à mão → prazo "Outra data"
     $('[name="due_date"]', modalForm).addEventListener('change', () => { const c = $('[name="term"][value="custom"]', modalForm); if (c) c.checked = true; sync(); });
     const showFiles = () => {
