@@ -137,7 +137,7 @@ function scoreBill(b, info) {
 }
 
 const hasReceipt = (b) => (b.attachments || []).some((a) => a.kind === 'comprovante');
-const receiptOpen = (b) => b.status === 'pending' || (b.status === 'paid' && !hasReceipt(b));
+const receiptOpen = (b) => (b.status === 'pending' && b.approval !== 'rejected') || (b.status === 'paid' && !hasReceipt(b));
 const receiptCandidates = () => state.bills.filter(receiptOpen);
 
 /** Contas das OUTRAS franquias liberadas (o comprovante pode ser do Piauí com o app no Ceará). */

@@ -52,7 +52,7 @@ function stockBalances() {
 function stockIncoming() {
   const inc = {};
   for (const b of state.bills || []) {
-    if (b.status !== 'pending' || !Array.isArray(b.items)) continue;
+    if (b.status !== 'pending' || b.approval === 'requested' || b.approval === 'rejected' || !Array.isArray(b.items)) continue;
     for (const x of b.items) if (x.item_id && Number(x.qty) > 0) (inc[x.item_id] ||= []).push({ qty: Number(x.qty), bill: b });
   }
   return inc;

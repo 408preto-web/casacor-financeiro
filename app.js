@@ -139,7 +139,7 @@ const memberName = (id) => { const m = state.members.find((x) => x.user_id === i
 const firstName = (id) => memberName(id).split(' ')[0];
 const cardById = (id) => state.cards.find((c) => c.id === id);
 const cardLabel = (c) => (c ? `${c.name}${c.final ? ' •' + c.final : ''}` : 'Cartão');
-const normBill = (b) => ({ ...b, cents: toCents(b.amount), paidCents: b.paid_amount == null ? null : toCents(b.paid_amount), attachments: Array.isArray(b.attachments) ? b.attachments : [] });
+const normBill = (b) => ({ ...b, cents: toCents(b.amount), paidCents: b.paid_amount == null ? null : toCents(b.paid_amount), attachments: Array.isArray(b.attachments) ? b.attachments : [] , approval: b.approval || 'approved' });
 
 /** Em qual fatura cai uma compra no cartão (compras a partir do dia de fechamento vão para a seguinte). */
 function invoiceDue(card, dateISO) {
@@ -178,6 +178,8 @@ async function loadAll({ quiet = false } = {}) {
       api.select('settings', 'select=*'),
       api.select('bills', 'select=*&order=due_date,created_at'),
     ]);
+    if (bills.length) state.approvalOn = 'approval' in bills[0];
+    else if (state.approvalOn === undefined) state.approvalOn = await api.select('bills', 'select=approval&limit=1').then(() => true).catch(() => false);
     const me = me0;
     Object.assign(state, { members, areas, cards, settings: settings[0] || { edition: '' }, bills: bills.map(normBill), loadedAt: Date.now() });
     await loadRH(); // funcionários e ocorrências (rh.js) — só para quem tem acesso ao RH
@@ -439,7 +441,7 @@ async function loadOtherUnitsDue() {
   if (!isPayer() || !others.length) { state.otherDue = []; return; }
   try {
     const rows = await api.select('bills', `select=id,unit,supplier,amount,due_date,method,card_id&status=eq.pending&due_date=lte.${addDaysISO(todayISO(), 1)}&unit=in.(${others.join(',')})&order=due_date`);
-    state.otherDue = rows.map((b) => ({ ...b, cents: toCents(b.amount) }));
+    state.otherDue = rows.filter((b) => !b.approval || b.approval === 'approved').map((b) => ({ ...b, cents: toCents(b.amount) }));
   } catch { state.otherDue = state.otherDue || []; }
 }
 /** Por franquia: atrasadas, hoje e amanhã (compras no cartão contam como uma fatura). */
@@ -470,7 +472,7 @@ function otherUnitsAlert() {
 
 function updateBadges() {
   const others = otherUnitsSummary().reduce((s, u) => s + u.late[0] + u.today[0], 0);
-  const n = isPayer() ? pendingBills().filter((b) => b.due_date <= todayISO()).length + others : 0;
+  const n = isPayer() ? pendingBills().filter((b) => b.due_date <= todayISO()).length + others + requestBills().length : 0;
   const pb = $('.nav-item[data-view="painel"] .nav-badge'); if (pb) { pb.textContent = n; pb.hidden = !n; }
   const no = canObra() ? (state.obraStages || []).filter((x) => x.env_id != null && stageLate(x)).length : 0;
   const ob = $('.nav-item[data-view="obra"] .nav-badge'); if (ob) { ob.textContent = no; ob.hidden = !no; }
@@ -482,7 +484,9 @@ function updateBadges() {
 }
 
 /* ---------- Componentes ---------- */
-const pendingBills = () => state.bills.filter((b) => b.status === 'pending');
+const isApproved = (b) => !b.approval || b.approval === 'approved';
+const pendingBills = () => state.bills.filter((b) => b.status === 'pending' && isApproved(b));
+const requestBills = () => state.bills.filter((b) => b.approval === 'requested' && b.status === 'pending');
 
 /** Agrupa compras no cartão em faturas; demais contas ficam como estão. */
 function payables(list) {
@@ -498,6 +502,8 @@ function payables(list) {
 }
 
 function statusBadge(b) {
+  if (b.approval === 'requested' && b.status === 'pending') return '<span class="badge open">⏳ aguardando aprovação</span>';
+  if (b.approval === 'rejected') return '<span class="badge late">❌ recusada</span>';
   if (b.status === 'paid') return '<span class="badge paid">pago</span>';
   if (b.status === 'cancelled') return '<span class="badge">cancelado</span>';
   const n = daysUntil(b.due_date);
@@ -600,6 +606,7 @@ function renderPainel() {
   ${alert}
   ${tomorrowAlert}
   ${isPayer() ? otherUnitsAlert() : ''}
+  ${isPayer() && requestBills().length ? `<div class="alerts"><div class="alert info"><span class="alert-icon">📝</span><div class="alert-text"><b>${requestBills().length} solicitação(ões) de compra aguardando aprovação</b> (${money(sumCents(requestBills()))}) <span class="muted">${[...new Set(requestBills().map((b) => firstName(b.created_by)))].map(esc).join(', ')}</span></div><button class="btn small primary" data-reqs="1">Ver e aprovar</button></div></div>` : ''}
   ${isHR() ? payrollBanner() : ''}
   ${isHR() ? rhAlertsBanner() : ''}
   ${backupBanner()}
@@ -629,7 +636,9 @@ function renderPainel() {
 function filteredBills() {
   const f = ui.filter; const q = f.q.trim().toLowerCase();
   return state.bills.filter((b) =>
-    (ui.tab === 'all' || b.status === ui.tab) &&
+    (ui.tab === 'all' || (ui.tab === 'requested' ? b.approval === 'requested' && b.status === 'pending'
+      : ui.tab === 'pending' ? b.status === 'pending' && isApproved(b)
+      : ui.tab === 'cancelled' ? b.status === 'cancelled' || b.approval === 'rejected' : b.status === ui.tab)) &&
     (!f.area || String(b.area_id) === f.area) &&
     (!f.who || b.created_by === f.who) &&
     (!f.method || b.method === f.method) &&
@@ -646,7 +655,8 @@ function renderContas() {
   const groups = {};
   for (const b of list) { const k = b.status === 'paid' ? b.paid_at : b.due_date; (groups[k] ||= []).push(b); }
   const opt = (v, l, sel) => `<option value="${esc(v)}" ${sel === v ? 'selected' : ''}>${esc(l)}</option>`;
-  const tabs = [['pending', 'A pagar'], ['paid', 'Pagas'], ['cancelled', 'Canceladas'], ['all', 'Todas']];
+  const nReq = requestBills().length;
+  const tabs = [['pending', 'A pagar'], ...(state.approvalOn ? [['requested', `Solicitações${nReq ? ` (${nReq})` : ''}`]] : []), ['paid', 'Pagas'], ['cancelled', 'Canceladas / recusadas'], ['all', 'Todas']];
   return `
   <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${ui.tab === k ? 'active' : ''}" data-tab="${k}">${l}</button>`).join('')}</div>
   <div class="card">
@@ -701,7 +711,7 @@ function renderCartoes() {
 /* ---------- Relatórios ---------- */
 function reportBills() {
   const r = ui.report;
-  return state.bills.filter((b) => b.status !== 'cancelled' &&
+  return state.bills.filter((b) => b.status !== 'cancelled' && isApproved(b) &&
     (!r.edition || b.edition === r.edition) &&
     (!r.from || (b.status === 'paid' ? b.paid_at : b.due_date) >= r.from) &&
     (!r.to || (b.status === 'paid' ? b.paid_at : b.due_date) <= r.to));
@@ -860,6 +870,7 @@ function bindView() {
   $$('[data-invoice]', v).forEach((el) => el.addEventListener('click', () => openInvoice(el.dataset.invoice)));
   $$('[data-go]', v).forEach((el) => el.addEventListener('click', () => setView(el.dataset.go)));
   $('#rcOpen', v)?.addEventListener('click', () => openReceiptFlow());
+  $$('[data-reqs]', v).forEach((b) => b.addEventListener('click', () => { ui.tab = 'requested'; setView('contas'); }));
   $('#bkBtn', v)?.addEventListener('click', makeBackup);
   $('#bkNow', v)?.addEventListener('click', makeBackup);
   $$('[data-gounit]', v).forEach((b) => b.addEventListener('click', () => { ui.view = 'painel'; switchUnit(b.dataset.gounit); }));
@@ -1012,7 +1023,8 @@ function openBillForm(bill, defaults = {}) {
   const suppliers = [...new Set(state.bills.map((x) => x.supplier))].sort();
   const activeCards = state.cards.filter((c) => c.active || c.id === b.card_id);
   const html = `
-    <h2>${isEdit ? 'Editar conta' : 'Lançar conta a pagar'}</h2>
+    <h2>${isEdit ? 'Editar conta' : state.approvalOn && state.me.role === 'member' ? '📝 Solicitar compra' : 'Lançar conta a pagar'}</h2>
+    ${!isEdit && state.approvalOn && state.me.role === 'member' ? '<p class="muted" style="margin-top:-6px">Vai para aprovação de quem paga. Depois de aprovada, entra em “a pagar”.</p>' : ''}
     <div class="form-grid">
       <label class="field full"><span>Fornecedor *</span><input name="supplier" list="suppliers" value="${esc(b.supplier)}" required placeholder="Quem vai receber o pagamento" autocomplete="off">
         <datalist id="suppliers">${suppliers.map((s) => `<option value="${esc(s)}">`).join('')}</datalist></label>
@@ -1105,7 +1117,7 @@ function openBillForm(bill, defaults = {}) {
         installment: n > 1 ? `${i + 1}/${n}` : '', attachments,
       }));
       await api.insert('bills', rows);
-      toast(n > 1 ? `Conta lançada em ${n} parcelas ✅` : 'Conta lançada ✅');
+      toast(state.approvalOn && state.me.role === 'member' ? '📝 Solicitação enviada — aguarda aprovação' : n > 1 ? `Conta lançada em ${n} parcelas ✅` : 'Conta lançada ✅');
     }
     await loadAll({ quiet: true });
     render();
@@ -1195,6 +1207,9 @@ function openBill(id) {
       <div class="detail-amount">${money(b.cents)} ${statusBadge(b)}</div></div>
     <dl class="detail">
       ${billItemsText(b) ? `<dt>Itens</dt><dd>📦 ${esc(billItemsText(b))} ${b.status === 'paid' ? '<span class="badge paid">entrou no estoque</span>' : '<span class="muted small">(entram no estoque quando a conta for paga)</span>'}</dd>` : ''}
+      ${b.approval === 'requested' && b.status === 'pending' ? `<dt>Aprovação</dt><dd><span class="badge open">⏳ aguardando aprovação</span></dd>` : ''}
+      ${b.approval === 'rejected' ? `<dt>Aprovação</dt><dd><span class="badge late">❌ recusada</span>${b.approval_note ? ' — ' + esc(b.approval_note) : ''}${b.approval_by ? ` <span class="muted small">(${esc(memberName(b.approval_by))})</span>` : ''}</dd>` : ''}
+      ${b.approval === 'approved' && b.approval_by && b.approval_by !== b.created_by ? `<dt>Aprovada por</dt><dd>${esc(memberName(b.approval_by))}${b.approval_at ? ' em ' + fmtDate(String(b.approval_at).slice(0, 10)) : ''}</dd>` : ''}
       <dt>Área</dt><dd><span class="area-dot" style="--c:${a.color}"></span>${esc(a.name)}${b.category ? ' › <b>' + esc(b.category) + '</b>' : ''}${b.edition ? ` · edição ${esc(b.edition)}` : ''}</dd>
       <dt>Lançada por</dt><dd>${esc(memberName(b.created_by))} · ${new Date(b.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</dd>
       <dt>Data da compra</dt><dd>${fmtDate(b.purchase_date)}</dd>
@@ -1210,7 +1225,9 @@ function openBill(id) {
     <div class="modal-actions">
       ${canDelete ? `<button class="btn danger" value="delete" formnovalidate>Excluir</button>` : ''}
       ${canDelete && group > 1 ? `<button class="btn danger" value="deleteGroup" formnovalidate>Excluir parcelas futuras</button>` : ''}
-      ${isPayer() && b.status === 'pending' ? '<button class="btn" value="cancelBill" formnovalidate>Cancelar conta</button>' : ''}
+      ${isPayer() && b.status === 'pending' && b.approval === 'requested' ? '<button class="btn danger" value="reject" formnovalidate>❌ Recusar</button><button class="btn primary" value="approve" formnovalidate>✅ Aprovar</button>' : ''}
+      ${isPayer() && b.approval === 'rejected' ? '<button class="btn" value="approve" formnovalidate>Aprovar mesmo assim</button>' : ''}
+      ${isPayer() && b.status === 'pending' && b.approval !== 'requested' ? '<button class="btn" value="cancelBill" formnovalidate>Cancelar conta</button>' : ''}
       ${isPayer() && b.status !== 'pending' ? '<button class="btn" value="reopen" formnovalidate>Voltar para “a pagar”</button>' : ''}
       <span class="spacer"></span>
       ${canEdit ? '<button class="btn" value="edit" formnovalidate>Editar</button>' : ''}
@@ -1219,6 +1236,13 @@ function openBill(id) {
     </div>`,
   async (action) => {
     if (action === 'edit') { setTimeout(() => openBillForm(b), 0); return; }
+    if (action === 'approve' || action === 'reject') {
+      let note = '';
+      if (action === 'reject') { note = prompt('Motivo da recusa (aparece para quem pediu):', '') ?? null; if (note === null) return false; }
+      const rows = await api.update('bills', `id=eq.${b.id}`, { approval: action === 'approve' ? 'approved' : 'rejected', approval_note: note.trim() });
+      if (!rows?.length) throw new Error('Você não tem permissão para isso.');
+      toast(action === 'approve' ? '✅ Compra aprovada — agora está em "a pagar"' : '❌ Solicitação recusada'); await loadAll({ quiet: true }); render(); return;
+    }
     if (action === 'pay') { setTimeout(() => (b.method === 'cartao' ? openInvoice(`${b.card_id}|${b.due_date}`) : openPay([b])), 0); return; }
     if (action === 'delete' || action === 'deleteGroup') {
       const targets = action === 'deleteGroup' ? state.bills.filter((x) => x.group_id === b.group_id && x.due_date >= b.due_date && (isAdmin() || x.status === 'pending')) : [b];
