@@ -79,7 +79,7 @@ function rhRelatorio() {
     <label class="field"><span>Mês</span><input type="month" id="frMonth" value="${d.month}"></label>
     <label class="field"><span>Funcionários</span><select id="frType">
       <option value="all" ${rrep.type === 'all' ? 'selected' : ''}>Todos</option><option value="monthly" ${rrep.type === 'monthly' ? 'selected' : ''}>Mensalistas</option><option value="weekly" ${rrep.type === 'weekly' ? 'selected' : ''}>Semanalistas (obra)</option></select></label>
-    <div class="row-actions fr-actions"><button class="btn wa-btn fr-wa" id="frShare" ${d.pays.length ? '' : 'disabled'}>📲 Enviar pelo WhatsApp</button><button class="btn" id="frPrint" ${d.pays.length ? '' : 'disabled'}>🖨️ Imprimir</button><button class="btn" id="frCsv" ${d.pays.length ? '' : 'disabled'}>📊 Excel</button></div>
+    <div class="row-actions fr-actions"><button class="btn wa-btn fr-wa" id="frShare" ${d.pays.length ? '' : 'disabled'}>📲 Enviar pelo WhatsApp</button><button class="btn" id="frPrint" ${d.pays.length ? '' : 'disabled'}>🖨️ Imprimir</button><button class="btn" id="frCsv" ${d.pays.length ? '' : 'disabled'}>📊 Excel</button><button class="btn" id="frSlips" ${d.pays.length ? '' : 'disabled'}>🧾 Holerites</button></div>
   </div>
   ${d.missing.length ? `<div class="alerts mt"><div class="alert info"><span class="alert-icon">ℹ️</span><div class="alert-text"><b>Ainda não gerado neste mês:</b> <span class="muted">${esc(d.missing.join(', '))}</span></div><button class="btn small" data-rhtab="folha">Ir para a Folha</button></div></div>` : ''}
   <div class="grid cols-4 mt">
@@ -265,6 +265,7 @@ async function sendFolhaFile(file, d) {
 function bindFolhaReport(v) {
   if ($('#frShare', v)) loadPdfLibs().catch(() => {}); // já deixa pronto para o compartilhar ser imediato
   $('#frShare', v)?.addEventListener('click', shareFolha);
+  $('#frSlips', v)?.addEventListener('click', openPayslips);
   $('#frMonth', v)?.addEventListener('change', (e) => { rrep.month = e.target.value; render(); });
   $('#frType', v)?.addEventListener('change', (e) => { rrep.type = e.target.value; render(); });
   $('#frPrint', v)?.addEventListener('click', printFolha);
