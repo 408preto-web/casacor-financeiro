@@ -523,6 +523,7 @@ function billRow(b, { showDue = true } = {}) {
     `por ${esc(firstName(b.created_by))}`,
     b.installment ? `parcela ${esc(b.installment)}` : '',
     b.attachments.length ? `📎 ${b.attachments.length}` : '',
+    lateEstimate(b) ? `<span class="neg">atrasada há ${lateEstimate(b).days} dia(s) · ≈ ${money(lateEstimate(b).total)} com multa e juros</span>` : '',
   ].filter(Boolean).join(' · ');
   const when = b.status === 'paid' ? `pago ${shortDate(b.paid_at)}` : showDue ? `${shortDate(b.due_date)}` : '';
   return `<li class="tx" data-bill="${b.id}">
@@ -548,6 +549,13 @@ function invoiceRow(inv) {
   </li>`;
 }
 const payableRow = (p) => (p.invoice ? invoiceRow(p) : billRow(p));
+/** Conta atrasada: estimativa pelo padrão dos boletos — multa de 2% + juros de 1% ao mês (proporcional aos dias). */
+function lateEstimate(b, onDate = todayISO()) {
+  if (!b || b.status !== 'pending' || !b.due_date || b.due_date >= onDate || b.method === 'cartao') return null;
+  const days = dateDiffDays(b.due_date, onDate);
+  const fine = Math.round(b.cents * 0.02), interest = Math.round((b.cents * 0.01 * days) / 30);
+  return { days, fine, interest, extra: fine + interest, total: b.cents + fine + interest };
+}
 const sumCents = (list) => list.reduce((s, b) => s + (b.cents || 0), 0);
 
 /* ---------- Painel ---------- */
@@ -1239,6 +1247,20 @@ function openBill(id) {
 }
 
 /* ---------- Pagar ---------- */
+/** Pergunta, na hora de pagar, se o valor com juros/multa (do comprovante ou estimado) deve ser usado. */
+function latePrompt(b, preset) {
+  const first = esc((state.me?.name || '').split(' ')[0]);
+  const exact = preset.amountCents && preset.amountCents !== b.cents ? preset.amountCents : null;
+  const est = !exact && preset.amountCents == null ? lateEstimate(b, preset.paidAt || todayISO()) : null;
+  const val = exact ?? est?.total; if (!val) return '';
+  const diff = val - b.cents;
+  const msg = exact
+    ? `${first}, pelo comprovante esta conta foi paga ${diff > 0 ? `com <b>juros/multa de ${money(diff)}</b>` : `com <b>desconto de ${money(-diff)}</b>`}: o valor passa de <b>${money(b.cents)}</b> para <b>${money(val)}</b>.`
+    : `${first}, esta conta está <b>atrasada há ${est.days} dia(s)</b>. Com multa (2%) e juros (1% ao mês), o valor fica em torno de <b>${money(val)}</b> (+${money(diff)}). Confira o valor exato no boleto.`;
+  return `<div class="late-q" data-val="${val}" data-exact="${exact ? 1 : 0}"><p>${diff > 0 ? '⚠️' : '💚'} ${msg}</p>
+    <div class="row-actions"><button type="button" class="btn small ${exact ? 'primary' : ''}" data-lateuse="${val}">✅ Concordo, usar ${money(val)}</button><button type="button" class="btn small ${exact ? '' : 'primary'}" data-lateuse="${b.cents}">Manter ${money(b.cents)}</button></div></div>`;
+}
+
 function openPay(bills, title, preset = {}) {
   const total = sumCents(bills);
   const payers = state.members.filter((m) => ['payer', 'admin'].includes(m.role));
@@ -1254,7 +1276,8 @@ function openPay(bills, title, preset = {}) {
         : '<label class="field"><span>Comprovante (foto ou PDF)</span><input type="file" name="receipt" accept="image/*,application/pdf" multiple></label>'}
       <label class="field full"><span>Observação do pagamento</span><input name="payment_notes" value="${esc(preset.notes || '')}" placeholder="Ex.: pago com desconto, juros…"></label>
     </div>
-    ${one && preset.hint ? `<div class="rc-diff" id="payDiff">${preset.hint}</div>` : one ? '<div class="rc-diff" id="payDiff" hidden></div>' : ''}
+    ${one ? latePrompt(one, preset) : ''}
+    ${one ? '<div class="rc-diff" id="payDiff" hidden></div>' : ''}
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Confirmar pagamento</button></div>`,
   async (action, fd) => {
     const paidCents = one ? parseMoney(fd.get('amount')) : null;
@@ -1278,6 +1301,11 @@ function openPay(bills, title, preset = {}) {
       box.innerHTML = d > 0 ? `⚠️ Juros/multa: <b>+ ${money(d)}</b> sobre ${money(one.cents)}` : `💚 Desconto: <b>− ${money(-d)}</b> sobre ${money(one.cents)}`;
       const n = $('[name="payment_notes"]', modalForm); if (n && (!n.value || /^(Juros\/multa|Desconto) de/.test(n.value))) n.value = d ? (d > 0 ? `Juros/multa de ${money(d)} (valor da conta ${money(one.cents)})` : `Desconto de ${money(-d)} (valor da conta ${money(one.cents)})`) : '';
     });
+    $$('[data-lateuse]', modalForm).forEach((btn) => btn.addEventListener('click', () => {
+      inp.value = centsToInput(Number(btn.dataset.lateuse)); inp.dispatchEvent(new Event('input'));
+      $$('[data-lateuse]', modalForm).forEach((x) => x.classList.toggle('primary', x === btn));
+    }));
+    if (preset.amountCents && one && preset.amountCents !== one.cents) inp.dispatchEvent(new Event('input'));
   });
 }
 

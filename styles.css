@@ -798,3 +798,5 @@ button.chip { cursor: pointer; }
 .rc-new .btn { justify-self: start; }
 .btn.rc-new-link { width: 100%; margin-bottom: 8px; }
 .rc-diff { margin: 10px 0 4px; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 14%, transparent); font-size: 14px; display: grid; gap: 6px; }
+.late-q { margin: 10px 0 4px; padding: 12px; border-radius: 12px; border: 2px solid color-mix(in srgb, var(--warn) 55%, var(--border)); background: color-mix(in srgb, var(--warn) 10%, var(--surface)); display: grid; gap: 8px; }
+.late-q p { margin: 0; font-size: 15px; }

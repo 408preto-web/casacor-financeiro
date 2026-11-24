@@ -252,7 +252,7 @@ async function attachReceiptTo(c, files, info) {
   if (b.status === 'pending') {
     const paidAt = info.dates.find((d) => d <= todayISO()) || todayISO();
     const amount = receiptPaidCents(b.cents, info, b.due_date < paidAt);
-    return openPay([b], 'Marcar como pago', { files, amountCents: amount, paidAt, ...paidDiffNote(b.cents, amount) });
+    return openPay([b], 'Marcar como pago', { files, amountCents: amount, paidAt, notes: paidDiffNote(b.cents, amount).notes || '' });
   }
   // Conta já paga: se o comprovante mostra outro valor (juros/multa ou desconto), oferece corrigir o valor pago
   const nowPaid = b.paidCents ?? b.cents;
