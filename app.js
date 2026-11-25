@@ -1,5 +1,7 @@
 'use strict';
 
+const APP_VERSION = 48; // mesma numeração do sw.js (casacor-pagamentos-vNN)
+
 /* =========================================================
    CASACOR Ceará — Controle de Pagamentos
    Quem compra lança a conta; quem paga (financeiro) vê o que vence e marca como pago.
@@ -855,6 +857,8 @@ function renderAjustes() {
       <div class="card mt"><h2>Instalar como app</h2>
         <p class="muted"><b>iPhone/iPad:</b> no Safari, Compartilhar (□↑) → <b>Adicionar à Tela de Início</b>.<br>
         <b>Android:</b> no Chrome, menu <b>⋮</b> → <b>Instalar app</b>.</p>
+        <p class="muted small">Versão do app: <b>${APP_VERSION}</b></p>
+        <button class="btn" id="forceUpdate">🔄 Atualizar o app agora</button>
       </div>
       ${backupCard()}
       ${pushCard()}
@@ -939,6 +943,7 @@ function bindView() {
   }
   if (ui.view === 'ajustes') {
     bindPush(v); if (pushState.status === 'unknown') refreshPushStatus().then(() => ui.view === 'ajustes' && !modal.open && render());
+    $('#forceUpdate')?.addEventListener('click', forceUpdate);
     $('#logout').addEventListener('click', () => {
       if (!confirm('Sair desta conta neste aparelho?')) return;
       api.signOut(); localStorage.removeItem(CACHE_KEY); location.reload();
@@ -1511,6 +1516,14 @@ document.addEventListener('keydown', (e) => {
   const map = { 1: 'painel', 2: 'contas', 3: 'cartoes', 4: 'relatorios', 5: 'equipe', 6: 'ajustes' };
   if (map[e.key]) setView(map[e.key]);
 });
+
+/** Apaga a cópia guardada no aparelho e baixa a versão mais nova (para aparelho que ficou preso numa versão antiga). */
+async function forceUpdate() {
+  toast('Atualizando o app…');
+  try { const regs = await navigator.serviceWorker?.getRegistrations?.() || []; await Promise.all(regs.map((r) => r.unregister())); } catch { /* ignora */ }
+  try { const keys = await caches.keys(); await Promise.all(keys.filter((k) => k.startsWith('casacor-pagamentos')).map((k) => caches.delete(k))); } catch { /* ignora */ }
+  location.replace(location.pathname + '?v=' + Date.now());
+}
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   const hadController = !!navigator.serviceWorker.controller;
