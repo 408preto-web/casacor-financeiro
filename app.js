@@ -487,7 +487,7 @@ function updateBadges() {
 /* ---------- Componentes ---------- */
 const isApproved = (b) => !b.approval || b.approval === 'approved';
 /** Última escolha do comprador ao lançar: pedido de compra ou conta já combinada. */
-const launchKind = () => { try { return localStorage.getItem('casacor:launchKind') === 'approved' ? 'approved' : 'requested'; } catch { return 'requested'; } };
+const launchKind = () => { try { return localStorage.getItem('casacor:launchKind') === 'requested' ? 'requested' : 'approved'; } catch { return 'approved'; } };
 const pendingBills = () => state.bills.filter((b) => b.status === 'pending' && isApproved(b));
 const requestBills = () => state.bills.filter((b) => b.approval === 'requested' && b.status === 'pending');
 
