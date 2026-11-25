@@ -131,8 +131,35 @@ function folhaPrintHTML(d) {
   </div>`;
 }
 
+
+/* ---------- Imprimir ----------
+   Computador e Android: abre a impressora na hora (precisa ser no mesmo toque, sem atraso).
+   iPhone/iPad: o app instalado não abre a impressora direto, então gera o PDF e abre o menu
+   do aparelho, que tem "Imprimir" (e também salvar/enviar). */
+const printViaPdf = () => typeof isIOS === 'function' && isIOS();
+async function printPdfFile(makeFile, btn) {
+  const label = btn?.textContent; if (btn) { btn.disabled = true; btn.textContent = 'Gerando PDF…'; }
+  let file;
+  try { await loadPdfLibs(); file = makeFile(); }
+  catch (e) { toast(e.message || 'Não foi possível gerar o PDF'); return; }
+  finally { if (btn && document.contains(btn)) { btn.disabled = false; btn.textContent = label; } }
+  const open = async () => {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/, '') }); return; }
+    const url = URL.createObjectURL(file); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+  try { await open(); }
+  catch (e) {
+    if (e?.name === 'AbortError') return;
+    openModal(`<h2>🖨️ PDF pronto</h2><p class="muted">${esc(file.name)}</p><p>Toque abaixo e escolha <b>Imprimir</b>.</p>
+      <button type="button" class="btn primary big" id="prNow">🖨️ Abrir para imprimir</button>
+      <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Fechar</button></div>`, () => {},
+    () => $('#prNow').addEventListener('click', async () => { try { await open(); modal.close(); } catch (er) { if (er?.name !== 'AbortError') toast(er.message); } }));
+  }
+}
+
 function printFolha() {
   const d = folhaReportData(); if (!d.pays.length) return;
+  if (printViaPdf()) return printPdfFile(() => folhaPdfFile(d), $('#frPrint'));
   let area = $('#printArea');
   if (!area) { area = document.createElement('div'); area.id = 'printArea'; document.body.appendChild(area); }
   area.innerHTML = folhaPrintHTML(d);
@@ -140,7 +167,7 @@ function printFolha() {
   document.body.classList.add('printing');
   const done = () => { document.body.classList.remove('printing'); area.innerHTML = ''; document.title = old; };
   window.addEventListener('afterprint', done, { once: true });
-  setTimeout(() => { window.print(); setTimeout(() => { if (!window.matchMedia('print').matches) done(); }, 1500); }, 50);
+  window.print(); setTimeout(() => { if (!window.matchMedia('print').matches) done(); }, 1500);
 }
 
 function exportFolhaCsv() {

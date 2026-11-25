@@ -178,6 +178,7 @@ function areaPrintHTML(d) {
 
 function printAreaReport() {
   const d = areaReportData(); if (!d.list.length) return;
+  if (printViaPdf()) return printPdfFile(() => areaPdfFile(d), $('#arPrint'));
   let area = $('#printArea');
   if (!area) { area = document.createElement('div'); area.id = 'printArea'; document.body.appendChild(area); }
   area.innerHTML = areaPrintHTML(d);
@@ -185,7 +186,7 @@ function printAreaReport() {
   document.body.classList.add('printing');
   const done = () => { document.body.classList.remove('printing'); area.innerHTML = ''; document.title = old; };
   window.addEventListener('afterprint', done, { once: true });
-  setTimeout(() => { window.print(); setTimeout(() => { if (!window.matchMedia('print').matches) done(); }, 1500); }, 50);
+  window.print(); setTimeout(() => { if (!window.matchMedia('print').matches) done(); }, 1500);
 }
 
 function areaPdfFile(d) {
@@ -280,5 +281,5 @@ function bindAreaReport(v) {
   $('#arShare', v)?.addEventListener('click', shareAreaReport);
   $('#arPrint', v)?.addEventListener('click', printAreaReport);
   $('#arCsv', v)?.addEventListener('click', exportAreaCsv);
-  if ($('#arShare', v)) loadPdfLibs().catch(() => {});
+  if ($('#arShare', v)) loadPdfLibs().catch(() => {}); // PDF pronto para WhatsApp e para imprimir no iPhone/iPad
 }
