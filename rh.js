@@ -174,7 +174,8 @@ function payrollRows(type, refDate) {
   const isWeekly = type === 'W';
   const from = isWeekly ? addDaysISO(refDate, -6) : `${ym}-01`;
   const to = isWeekly ? refDate : `${ym}-${pad(lastDay(ym))}`;
-  const existing = new Set(state.bills.map((b) => b.payroll_ref).filter(Boolean));
+  // conta já gerada pela folha (uma cancelada não conta: dá para gerar de novo)
+  const genBill = (ref) => state.bills.find((b) => b.payroll_ref === ref && b.status !== 'cancelled');
   return state.employees
     .filter((e) => (isWeekly ? e.pay_type === 'weekly' : e.pay_type === 'monthly') && e.admission_date <= refDate &&
       (e.status === 'active' || (e.termination_date && e.termination_date >= from)))
@@ -193,7 +194,8 @@ function payrollRows(type, refDate) {
       const days = Math.max(0, fullDays - absent);
       const va = Math.round(toCents(e.va_daily || 0) * days), vt = Math.round(toCents(e.vt_daily || 0) * days);
       const ref = `${e.id}:${type}:${refDate}`;
-      return { emp: e, base, events, adj, days, fullDays, absent, va, vt, total: Math.max(0, base + va + vt + adj), ref, done: existing.has(ref) };
+      const bill = genBill(ref);
+      return { emp: e, base, events, adj, days, fullDays, absent, va, vt, total: Math.max(0, base + va + vt + adj), ref, bill, done: !!bill };
     });
 }
 
@@ -338,7 +340,7 @@ function rhFolha() {
         <td>${money(r.base)}</td>
         <td>${r.va + r.vt ? `${money(r.va + r.vt)}<div class="tx-meta">${r.days} dia(s)${r.absent ? ` (−${r.absent} falta/atestado)` : ''}${r.va ? ` · VA ${money(r.va)}` : ''}${r.vt ? ` · VT ${money(r.vt)}` : ''}</div>` : '—'}</td>
         <td>${r.events.length ? `<span class="${r.adj >= 0 ? 'pos' : 'neg'}">${r.adj >= 0 ? '+' : '−'} ${money(Math.abs(r.adj))}</span><div class="tx-meta">${r.events.map((x) => `${HR_KINDS[x.kind].label}${Number(x.quantity) ? ` ${String(Number(x.quantity)).replace('.', ',')}${HR_KINDS[x.kind].unit === 'horas' ? 'h' : 'd'}` : ''}`).join(', ')}</div>` : '—'}</td>
-        <td>${r.done ? `<span class="muted">já gerado</span>` : `<input class="pay-input" data-payval="${r.emp.id}" inputmode="decimal" value="${centsToInput(r.total)}">${r.total > 0 ? '' : `<div class="tx-meta neg">${zeroPayReason(r, p.type)}</div>`}`}</td>
+        <td>${r.done ? `<button type="button" class="link-btn" data-openbill="${r.bill.id}">já gerado · ${r.bill.status === 'paid' ? `pago ${fmtDate(r.bill.paid_at)}` : r.bill.approval === 'requested' ? 'aguardando aprovação' : `a pagar ${fmtDate(r.bill.due_date)}`} · ${money(r.bill.cents ?? Math.round(Number(r.bill.amount) * 100))}</button>` : `<input class="pay-input" data-payval="${r.emp.id}" inputmode="decimal" value="${centsToInput(r.total)}">${r.total > 0 ? '' : `<div class="tx-meta neg">${zeroPayReason(r, p.type)}</div>`}`}</td>
       </tr>`).join('')}</tbody></table>
       <div class="list-total"><span>${pending.length} pagamento(s) a gerar · vencimento ${fmtDate(date)}</span><b>${money(tot)}</b></div>
       <div class="row-actions mt"><button class="btn primary" id="genPay" ${pending.length ? '' : 'disabled'}>Gerar contas a pagar</button></div>
@@ -361,6 +363,7 @@ function bindRH(v) {
   $('#payMonth')?.addEventListener('change', (e) => { rhui.pay.month = e.target.value; render(); });
   $('#payWeek')?.addEventListener('change', (e) => { rhui.pay.week = e.target.value; render(); });
   $('#genPay')?.addEventListener('click', generatePayroll);
+  $$('[data-openbill]', v).forEach((b) => b.addEventListener('click', () => openBill(b.dataset.openbill)));
   // digitou um valor: já marca a pessoa para gerar (e libera o botão)
   const genBtn = () => { const b = $('#genPay', v); if (b) b.disabled = !$$('[data-payrow]:checked', v).length; };
   $$('[data-payval]', v).forEach((inp) => inp.addEventListener('input', () => {
@@ -396,6 +399,9 @@ async function generatePayroll() {
   if (!bills.length) { toast('Nenhum pagamento selecionado'); return; }
   if (!confirm(`Gerar ${bills.length} pagamento(s) com vencimento em ${fmtDate(date)}, total ${money(bills.reduce((s, b) => s + Math.round(b.amount * 100), 0))}?`)) return;
   try {
+    // se havia uma conta cancelada deste mesmo pagamento, libera a referência para gerar de novo
+    const refs = new Set(bills.map((b) => b.payroll_ref));
+    for (const old of state.bills.filter((b) => b.status === 'cancelled' && refs.has(b.payroll_ref))) await api.update('bills', `id=eq.${old.id}`, { payroll_ref: '' });
     await api.insert('bills', bills);
     toast(`${bills.length} pagamento(s) gerados ✅`);
     await loadAll({ quiet: true }); render();
