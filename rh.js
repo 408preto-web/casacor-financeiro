@@ -197,6 +197,16 @@ function payrollRows(type, refDate) {
     });
 }
 
+/** Por que o pagamento deu R$ 0 (aí ele vem desmarcado): explica e diz como resolver. */
+function zeroPayReason(r, type) {
+  const e = r.emp; const pct = Number(e.first_pay_percent);
+  if (!empCents(e)) return 'Sem salário no cadastro — toque no nome → Editar, ou digite o valor acima.';
+  if (type === 'M30' && pct >= 100) return 'O cadastro diz que 100% do salário é pago no dia 15. Se é pago no dia 30, edite o cadastro (parte do dia 15) ou digite o valor acima.';
+  if (type === 'M15' && pct <= 0) return 'O cadastro diz que o dia 15 é 0% (paga tudo no dia 30). Se quiser pagar agora, digite o valor acima.';
+  if (r.adj < 0) return 'Descontos/adiantamentos do mês zeraram o valor. Se estiver errado, digite o valor acima.';
+  return 'Valor zerado — digite o valor acima para gerar.';
+}
+
 /** Dias de falta/atestado de uma ocorrência que caem dentro do período [from, to]. */
 function overlapDays(x, from, to) {
   const start = x.date > from ? x.date : from;
@@ -328,7 +338,7 @@ function rhFolha() {
         <td>${money(r.base)}</td>
         <td>${r.va + r.vt ? `${money(r.va + r.vt)}<div class="tx-meta">${r.days} dia(s)${r.absent ? ` (−${r.absent} falta/atestado)` : ''}${r.va ? ` · VA ${money(r.va)}` : ''}${r.vt ? ` · VT ${money(r.vt)}` : ''}</div>` : '—'}</td>
         <td>${r.events.length ? `<span class="${r.adj >= 0 ? 'pos' : 'neg'}">${r.adj >= 0 ? '+' : '−'} ${money(Math.abs(r.adj))}</span><div class="tx-meta">${r.events.map((x) => `${HR_KINDS[x.kind].label}${Number(x.quantity) ? ` ${String(Number(x.quantity)).replace('.', ',')}${HR_KINDS[x.kind].unit === 'horas' ? 'h' : 'd'}` : ''}`).join(', ')}</div>` : '—'}</td>
-        <td>${r.done ? `<span class="muted">já gerado</span>` : `<input class="pay-input" data-payval="${r.emp.id}" inputmode="decimal" value="${centsToInput(r.total)}">`}</td>
+        <td>${r.done ? `<span class="muted">já gerado</span>` : `<input class="pay-input" data-payval="${r.emp.id}" inputmode="decimal" value="${centsToInput(r.total)}">${r.total > 0 ? '' : `<div class="tx-meta neg">${zeroPayReason(r, p.type)}</div>`}`}</td>
       </tr>`).join('')}</tbody></table>
       <div class="list-total"><span>${pending.length} pagamento(s) a gerar · vencimento ${fmtDate(date)}</span><b>${money(tot)}</b></div>
       <div class="row-actions mt"><button class="btn primary" id="genPay" ${pending.length ? '' : 'disabled'}>Gerar contas a pagar</button></div>
@@ -351,6 +361,12 @@ function bindRH(v) {
   $('#payMonth')?.addEventListener('change', (e) => { rhui.pay.month = e.target.value; render(); });
   $('#payWeek')?.addEventListener('change', (e) => { rhui.pay.week = e.target.value; render(); });
   $('#genPay')?.addEventListener('click', generatePayroll);
+  // digitou um valor: já marca a pessoa para gerar (e libera o botão)
+  const genBtn = () => { const b = $('#genPay', v); if (b) b.disabled = !$$('[data-payrow]:checked', v).length; };
+  $$('[data-payval]', v).forEach((inp) => inp.addEventListener('input', () => {
+    const cb = $(`[data-payrow="${inp.dataset.payval}"]`, v); if (cb && parseMoney(inp.value) > 0) cb.checked = true; genBtn();
+  }));
+  $$('[data-payrow]', v).forEach((cb) => cb.addEventListener('change', genBtn));
   bindFolhaReport(v);
 }
 
