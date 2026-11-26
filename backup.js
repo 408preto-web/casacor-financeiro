@@ -77,7 +77,7 @@ async function makeBackup() {
         'Chave Pix': e.pix_key, 'Dados bancários': e.bank_info, Observações: e.notes, Documentos: files(e.attachments) }))],
       ['Ocorrências RH', evs.map((x) => ({ Franquia: un(x.unit), Funcionário: eName(x.employee_id), Tipo: HR_KINDS[x.kind]?.label || x.kind, Data: d(x.date), Até: d(x.end_date),
         Quantidade: num(x.quantity), 'Valor (R$)': num(x.amount), Observação: x.notes }))],
-      ['Ambientes', envs.map((e) => ({ Franquia: un(e.unit), Número: e.number, Ambiente: e.name, Arquiteto: e.architect, Ativo: e.active ? 'sim' : 'não', 'Link do QR': e.qr_token ? `${location.origin}${location.pathname}#obra=${e.qr_token}` : '' }))],
+      ['Ambientes', envs.map((e) => ({ Franquia: un(e.unit), Número: e.number, Ambiente: e.name, Arquiteto: e.architect, Telefone: e.phone || '', 'E-mail': e.email || '', Ativo: e.active ? 'sim' : 'não', 'Link do QR': e.qr_token ? `${location.origin}${location.pathname}#obra=${e.qr_token}` : '' }))],
       ['Portaria - pessoas', people.map((p) => ({ Franquia: un(p.unit), Nome: p.name, CPF: p.cpf, Empresa: p.company, Telefone: p.phone, 'Equipe CASACOR': p.is_team ? 'sim' : '',
         Bloqueado: p.blocked ? 'SIM' : '', Motivo: p.block_reason }))],
       ['Portaria - entradas', entries.map((x) => ({ Franquia: un(x.unit), Pessoa: pName(x.person_id), Ambiente: envName(x.env_id), Trabalho: x.service, Entrada: dt(x.entered_at), Saída: dt(x.exited_at), Observação: x.notes }))],

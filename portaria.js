@@ -381,13 +381,16 @@ function exportGateCsv() {
 }
 
 /* ---------- Ambientes (equipe) ---------- */
+/** Telefone/e-mail do arquiteto: só depois de rodar o supabase-ambientes-contato.sql. */
+const envContactOn = () => (state.gateEnvs || []).some((e) => 'phone' in e);
+const waLink = (phone) => { const d = String(phone || '').replace(/\D/g, ''); return d ? `https://wa.me/${d.length <= 11 ? '55' + d : d}` : ''; };
 function gateEnvsView() {
   const inside = {}; openEntries().forEach((x) => { inside[x.env_id] = (inside[x.env_id] || 0) + 1; });
   const all = [...(state.gateEnvs || [])].sort((a, b) => (a.number || '~').localeCompare(b.number || '~', 'pt', { numeric: true }) || a.name.localeCompare(b.name));
   return `<div class="card"><div class="card-head"><h2>Ambientes da obra</h2><button class="btn small primary" id="gNewEnv">+ Novo ambiente</button></div>
     <p class="muted small" style="margin-top:-6px">Cadastre cada ambiente com o número, o nome e o arquiteto responsável. O porteiro escolhe por eles.</p>
     <ul class="tx-list">${all.map((e) => `<li class="member-row"><div class="avatar">${esc(e.number || '•')}</div>
-      <div class="tx-main"><div class="tx-title">${esc(e.name)} ${e.active ? '' : '<span class="badge">inativo</span>'}</div><div class="tx-meta">${esc(e.architect || 'Sem arquiteto')}${inside[e.id] ? ` · <b>${inside[e.id]} na obra agora</b>` : ''}</div></div>
+      <div class="tx-main"><div class="tx-title">${esc(e.name)} ${e.active ? '' : '<span class="badge">inativo</span>'}</div><div class="tx-meta">${esc(e.architect || 'Sem arquiteto')}${e.phone ? ` · <a href="${waLink(e.phone)}" target="_blank" rel="noopener">📱 ${esc(e.phone)}</a>` : ''}${e.email ? ` · ${esc(e.email)}` : ''}${inside[e.id] ? ` · <b>${inside[e.id]} na obra agora</b>` : ''}</div></div>
       <button class="btn small" data-genvedit="${e.id}">Editar</button></li>`).join('')}</ul></div>`;
 }
 
@@ -398,11 +401,14 @@ function openEnvForm(env) {
       <label class="field"><span>Número</span><input name="number" value="${esc(e.number)}" placeholder="Ex.: 12"></label>
       <label class="field"><span>Nome do ambiente *</span><input name="name" value="${esc(e.name)}" required placeholder="Ex.: Cozinha gourmet"></label>
       <label class="field full"><span>Arquiteto(a) / escritório responsável</span><input name="architect" value="${esc(e.architect)}" placeholder="Ex.: Sofia Andrade"></label>
+      ${envContactOn() ? `<label class="field"><span>Telefone / WhatsApp</span><input name="phone" inputmode="tel" value="${esc(e.phone || '')}" placeholder="(86) 99999-9999"></label>
+      <label class="field"><span>E-mail</span><input name="email" type="email" value="${esc(e.email || '')}"></label>` : ''}
       <label class="check full"><input type="checkbox" name="active" ${e.active ? 'checked' : ''}><span>Ativo (aparece para o porteiro)</span></label>
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Salvar</button></div>`,
   async (action, fd) => {
     const data = { number: fd.get('number').trim(), name: fd.get('name').trim(), architect: fd.get('architect').trim(), active: fd.get('active') === 'on' };
+    if (envContactOn()) { data.phone = String(fd.get('phone') || '').trim(); data.email = String(fd.get('email') || '').trim(); }
     if (env) await api.update('gate_envs', `id=eq.${env.id}`, data); else await api.insert('gate_envs', data);
     toast('Ambiente salvo'); await reloadGate();
   });
