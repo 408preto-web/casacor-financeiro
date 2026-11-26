@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 50; // mesma numeração do sw.js (casacor-pagamentos-vNN)
+const APP_VERSION = 51; // mesma numeração do sw.js (casacor-pagamentos-vNN)
 
 /* =========================================================
    CASACOR Ceará — Controle de Pagamentos
@@ -1402,14 +1402,25 @@ function openAreaForm(area) {
       <label class="field"><span>Nome</span><input name="name" value="${esc(a.name)}" required></label>
       <label class="field"><span>Cor</span><input type="color" name="color" value="${a.color}"></label>
       <label class="check full"><input type="checkbox" name="active" ${a.active ? 'checked' : ''}><span>Ativa (aparece ao lançar contas)</span></label>
-      ${catsOn() ? `<label class="field full"><span>Categorias (uma por linha) — aparecem ao lançar e no relatório</span><textarea name="categories" rows="8" placeholder="Ex.:\nMão de obra\nMaterial de construção\nFrete">${esc((a.categories || []).join('\n'))}</textarea></label>` : ''}
+      ${catsOn() ? `<label class="field full"><span>Categorias (uma por linha) — aparecem ao lançar e no relatório. Para corrigir um nome, é só reescrever na mesma linha.</span><textarea name="categories" rows="8" placeholder="Ex.:\nMão de obra\nMaterial de construção\nFrete">${esc((a.categories || []).join('\n'))}</textarea></label>` : ''}
     </div>
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" value="save">Salvar</button></div>`,
   async (action, fd) => {
     const data = { name: fd.get('name').trim(), color: fd.get('color'), active: fd.get('active') === 'on' };
     if (catsOn()) data.categories = [...new Set(String(fd.get('categories') || '').split('\n').map((x) => x.trim()).filter(Boolean))];
     if (area) await api.update('areas', `id=eq.${area.id}`, data); else await api.insert('areas', { ...data, sort: a.sort });
-    toast('Área salva'); await loadAll({ quiet: true }); render();
+    // categoria renomeada (mesma linha, nome novo): as contas que já usavam o nome antigo passam a usar o novo
+    let renamed = 0;
+    const old = area && Array.isArray(area.categories) ? area.categories : [];
+    if (area && data.categories && old.length === data.categories.length) {
+      for (let i = 0; i < old.length; i++) {
+        const from = old[i], to = data.categories[i];
+        if (from === to || data.categories.includes(from)) continue;
+        const hit = state.bills.filter((b) => String(b.area_id) === String(area.id) && b.category === from);
+        if (hit.length) { await api.update('bills', `area_id=eq.${area.id}&category=eq.${encodeURIComponent(from)}`, { category: to }); renamed += hit.length; }
+      }
+    }
+    toast(renamed ? `Área salva — ${renamed} conta(s) passaram para a categoria nova` : 'Área salva'); await loadAll({ quiet: true }); render();
   });
 }
 
