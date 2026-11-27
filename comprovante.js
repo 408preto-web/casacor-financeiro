@@ -213,9 +213,10 @@ function pickBillForReceipt(files, info, failed = '', q = '') {
     <div class="rc-found">${failed ? `⚠️ ${esc(failed)}. Escolha a conta abaixo.`
       : found ? `No comprovante: ${info.amounts.slice(0, 3).map((a) => `<b>${money(a.cents)}</b>`).join(', ')}${info.dates[0] ? ` · ${fmtDate(info.dates[0])}` : ''}`
       : 'Não consegui ler o valor desse arquivo. Escolha a conta abaixo.'}</div>
-    ${!nq && !ranked.length ? `<div class="rc-new"><b>Não achei essa conta no sistema.</b> <span class="muted">Quer lançar agora, já como paga, com este comprovante?</span>
-      <button type="button" class="btn primary" id="rcNew">➕ Lançar esta conta agora</button></div>` : ''}
+    ${!nq && !ranked.length ? `<p class="muted small" style="margin:6px 0">Não reconheci a conta pelo comprovante. <b>Se ela está aqui embaixo, toque nela</b> — ela é marcada como paga, sem criar outra.</p>` : ''}
     <ul class="rc-list">${list.map(row).join('') || '<li class="muted">Nenhuma conta encontrada.</li>'}</ul>
+    ${!nq && !ranked.length ? `<div class="rc-new"><b>Não está na lista?</b> <span class="muted">Lance agora, já como paga, com este comprovante.</span>
+      <button type="button" class="btn" id="rcNew">➕ Lançar como nova conta paga</button></div>` : ''}
     <label class="field"><span>Procurar outra conta</span><input id="rcQ" value="${esc(q)}" placeholder="Fornecedor, descrição ou valor" autocomplete="off"></label>
     ${ranked.length || nq ? '<button type="button" class="btn rc-new-link" id="rcNew">➕ Não está na lista — lançar como nova conta paga</button>' : ''}
     <div class="modal-actions"><span class="spacer"></span><button class="btn" value="cancel" formnovalidate>Cancelar</button></div>`,

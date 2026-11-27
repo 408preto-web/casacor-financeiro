@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 53; // mesma numeração do sw.js (casacor-pagamentos-vNN)
+const APP_VERSION = 54; // mesma numeração do sw.js (casacor-pagamentos-vNN)
 
 /* =========================================================
    CASACOR Ceará — Controle de Pagamentos
