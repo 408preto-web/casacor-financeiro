@@ -308,6 +308,9 @@ async function openNewPaidBill(files, info) {
     if (!cat && (a?.categories || []).length) { toast('Escolha a categoria'); return false; }
     if (cents <= 0) { toast('Informe o valor pago'); return false; }
     const paidAt = fd.get('paid_at');
+    // já existe a conta a pagar desse pagamento (ex.: folha do dia 30 paga antes)? usa ela em vez de criar outra
+    const dup = unit === state.unit ? similarPending(fd.get('supplier').trim(), cents, paidAt) : null;
+    if (dup && confirm(dupQuestion(dup, 'marcar essa conta como paga com este comprovante'))) { setTimeout(() => attachReceiptTo(dup, files, info), 0); return; }
     const receipts = await uploadFiles(files, `pagamentos/${uuid()}`, 'comprovante');
     const editionRow = unit === state.unit ? state.settings : (await api.select('settings', `select=*&unit=eq.${unit}`).catch(() => []))[0];
     const row = { unit, supplier: fd.get('supplier').trim(), description: fd.get('description').trim(), area_id: Number(areaId), category: cat,

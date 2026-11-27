@@ -1,6 +1,6 @@
 'use strict';
 
-const APP_VERSION = 52; // mesma numeração do sw.js (casacor-pagamentos-vNN)
+const APP_VERSION = 53; // mesma numeração do sw.js (casacor-pagamentos-vNN)
 
 /* =========================================================
    CASACOR Ceará — Controle de Pagamentos
@@ -488,6 +488,19 @@ function updateBadges() {
 
 /* ---------- Componentes ---------- */
 const isApproved = (b) => !b.approval || b.approval === 'approved';
+/** Conta a pagar parecida já lançada (mesmo fornecedor, valor próximo, até 20 dias de diferença).
+ *  Evita lançar duas vezes o mesmo pagamento — ex.: folha do dia 30 paga antecipada no dia 27. */
+function similarPending(supplier, cents, date) {
+  const nm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const key = nm(supplier).split(/[^a-z0-9]+/).filter((w) => w.length >= 3).slice(0, 2);
+  if (!key.length || !cents) return null;
+  return state.bills
+    .filter((b) => b.status === 'pending' && b.approval !== 'rejected' && key.every((w) => nm(b.supplier).includes(w)))
+    .filter((b) => Math.abs(b.cents - cents) <= Math.max(500, b.cents * 0.25))
+    .filter((b) => !date || Math.abs((Date.parse(b.due_date) - Date.parse(date)) / 864e5) <= 20)
+    .sort((a, b) => Math.abs(a.cents - cents) - Math.abs(b.cents - cents))[0] || null;
+}
+const dupQuestion = (d, ok) => `Já existe uma conta a pagar parecida:\n\n${d.supplier} — ${money(d.cents)} — vence ${fmtDate(d.due_date)}${d.payroll_ref ? ' (folha)' : ''}\n\nSe é o mesmo pagamento (ex.: pagamento antecipado), toque OK para ${ok} — sem duplicar.\nToque Cancelar para lançar uma conta nova mesmo assim.`;
 /** Última escolha do comprador ao lançar: pedido de compra ou conta já combinada. */
 const launchKind = () => { try { return localStorage.getItem('casacor:launchKind') === 'requested' ? 'requested' : 'approved'; } catch { return 'approved'; } };
 const pendingBills = () => state.bills.filter((b) => b.status === 'pending' && isApproved(b));
@@ -1112,6 +1125,10 @@ function openBillForm(bill, defaults = {}) {
     if (catsOn()) {
       base.category = fd.get('category') === '__new' ? '' : fd.get('category') || '';
       if (!base.category && areaCats(base.area_id).length) { toast('Escolha a categoria (o que é)'); return false; }
+    }
+    if (!isEdit && n === 1) {
+      const dup = similarPending(base.supplier, cents, due);
+      if (dup && confirm(dupQuestion(dup, 'abrir essa conta e marcar como paga'))) { setTimeout(() => openPay([dup], 'Marcar como pago', { paidAt: todayISO() }), 0); return; }
     }
     const items = await readBillItems(fd, areaById(base.area_id).name); // itens para o estoque (estoque.js)
     if (items) base.items = items;
